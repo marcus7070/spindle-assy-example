@@ -4,7 +4,7 @@ import dims
 importlib.reload(dims)
 
 
-output = False
+output = False  # for printing dimensions so I know how to mill the bracket
 
 bracket = (
     cq
@@ -23,7 +23,6 @@ if output:
     for p in (cq.Workplane().rect(*dims.clamp.bolt.spacing).vertices().vals()):
         print("x: " + str(p.X) + ", y: " + str(p.Y))
 
-# v_slot_x = [(-1.5 + idx) * 20 for idx in range(4)]
 v_slot_x = [(-1.5 + idx) * 20 for idx in [0, 3]]
 tee_nut_holes_y = [(idx - 1) * dims.bracket.tee_nut_spacing for idx in range(3)]
 points = []
