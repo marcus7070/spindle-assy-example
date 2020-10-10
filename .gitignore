@@ -1,2 +1,4 @@
 /.stignore
 __pycache__
+result
+result-doc

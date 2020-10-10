@@ -20,6 +20,7 @@ def cslot(length=100):
         .workplaneFromTagged("base")
         .center(-dims.outer.x / 2 + dims.base_depth / 2, 0)
         .box(dims.base_depth, dims.outer.y, length, centered=(True, False, False))
+        .tag("unslotted")
     )
     points = []
     for idx in range(4):
@@ -37,7 +38,6 @@ def cslot(length=100):
             ))
     for xval, yval, rot in points:
         out = out.cut(
-        # out = (
             cq
             .Workplane()
             .center(xval, yval)
