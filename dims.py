@@ -96,6 +96,11 @@ vac.mount_face.y = clamp.hole.pos[1] + bracket.thick - vac_brack.y
 vac.inner_rad = spindle.nut.diam / 2 + 4
 vac.z = vac_brack.z
 vac.wall_thick = 2
+vac.port = d()
+vac.port.rad = vac.hose.id / 2 * 1.2
+vac.brush = d()
+vac.brush.slot_width = 5.5
+vac.brush.slot_depth = 10  # brush has 20mm canvas on top
 
 
 magnet = d()
