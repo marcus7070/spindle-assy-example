@@ -58,6 +58,60 @@ def kidney_shape(
     # if there is a point 2/3 of the way along the perimeter between the first
     # and second control points, create another point 2/3 of the way along the
     # perimeter between the first and second control point of the circle.
+    kidney_control_points = []
+    hose_control_points = []
+    # first point is inner centre of kidney
+    # what's the angle to the vacuum hose?
+    angle = math.atan(top_pos[1] / top_pos[0])
+    # kidney control point
+    x0, y0 = bot_inner_rad * math.sin(angle), bot_inner_rad * math.cos(angle)
+    kidney_control_points.append((x0, y0))
+    # hose control point
+    x0 = top_pos[0] = top_rad * math.sin(angle + math.pi)
+    y0 = top_pos[1] = top_rad * math.cos(angle + math.pi)
+    hose_control_points.append((x0, y0))
+    # tangential points
+    # https://en.wikipedia.org/wiki/Tangent_lines_to_circles#Outer_tangent
+    # radius at the tip of the kidney shape
+    r1 = (bot_outer_rad - bot_inner_rad) / 2
+    x1, y1 = bot_inner_rad + r1, 0
+    r2 = top_rad
+    x2, y2 = top_pos[0], top_pos[1]
+    gamma = -math.atan((y2 - y1) / (x2 - x1))
+    beta = math.asin((r2 - r1) / math.sqrt(
+        (x2 - x1) ** 2 + (y2 - y1) ** 2
+    ))
+    alpha = gamma - beta
+    x3 = x1 + r1 * math.sin(alpha)
+    y3 = y1 + r1 * math.cos(alpha)
+    x4 = x2 + r2 * math.sin(alpha)
+    y4 = y2 + r2 * math.cos(alpha)
+    # print(f"kidney tangent point = {x3}, {y3}")
+    # print(f"hose tangent point = {x4}, {y4}")
+    kidney_control_points.append((x3, y3))
+    hose_control_points.append((x4, y4))
+    # third point is outer edge of kidney
+    # kidney control point
+    x0, y0 = bot_outer_rad * math.sin(angle), bot_outer_rad * math.cos(angle)
+    kidney_control_points.append((x0, y0))
+    # hose control point
+    x0 = top_pos[0] = top_rad * math.sin(angle)
+    y0 = top_pos[1] = top_rad * math.cos(angle)
+    hose_control_points.append((x0, y0))
+    # fourth point is opposite tangent
+    x1, y1 = 0, -(bot_inner_rad + r1)
+    gamma = -math.atan((y2 - y1) / (x2 - x1))
+    beta = math.asin((r2 - r1) / math.sqrt(
+        (x2 - x1) ** 2 + (y2 - y1) ** 2
+    ))
+    alpha = gamma - beta
+    x3 = x1 - r1 * math.sin(alpha)
+    y3 = y1 - r1 * math.cos(alpha)
+    x4 = x2 - r2 * math.sin(alpha)
+    y4 = y2 - r2 * math.cos(alpha)
+    kidney_control_points.append((x3, y3))
+    hose_control_points.append((x4, y4))
+
 
 
 inner_port_major_rad = dims.vac.inner_rad + dims.vac.wall_thick
