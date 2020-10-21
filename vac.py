@@ -35,16 +35,16 @@ importlib.reload(dims)
 # vertical face is cq.Face.makeRuledSurface(top_wire, bottom_wire)
 # then make shell, solid, cut
 
-def kidney_shape(
+def kidney_and_circle_wires(
         top_rad
         , top_pos
         , bot_inner_rad
         , bot_outer_rad
     ):
     """
-    creates a lofted shape from a circle at top_pos with radius top_rad down to
-    a kidney shape centered at the origin and with inner radius bot_inner_rad
-    and outer radius bot_outer_rad.
+    creates the wires required for a lofted shape from a circle at top_pos with
+    radius top_rad down to a kidney shape centered at the origin and with inner
+    radius bot_inner_rad and outer radius bot_outer_rad.
     """
     # calculate tangential points between the two shapes, these will become
     # "control points"
@@ -62,13 +62,13 @@ def kidney_shape(
     hose_control_points = []
     # first point is inner centre of kidney
     # what's the angle to the vacuum hose?
-    angle = math.atan(top_pos[1] / top_pos[0])
+    angle = math.atan(top_pos[1] / top_pos[0]) + math.pi
     # kidney control point
     x0, y0 = bot_inner_rad * math.sin(angle), bot_inner_rad * math.cos(angle)
     kidney_control_points.append((x0, y0))
     # hose control point
-    x0 = top_pos[0] = top_rad * math.sin(angle + math.pi)
-    y0 = top_pos[1] = top_rad * math.cos(angle + math.pi)
+    x0 = top_pos[0] + top_rad * math.sin(angle + math.pi)
+    y0 = top_pos[1] + top_rad * math.cos(angle + math.pi)
     hose_control_points.append((x0, y0))
     # tangential points
     # https://en.wikipedia.org/wiki/Tangent_lines_to_circles#Outer_tangent
@@ -95,8 +95,8 @@ def kidney_shape(
     x0, y0 = bot_outer_rad * math.sin(angle), bot_outer_rad * math.cos(angle)
     kidney_control_points.append((x0, y0))
     # hose control point
-    x0 = top_pos[0] = top_rad * math.sin(angle)
-    y0 = top_pos[1] = top_rad * math.cos(angle)
+    x0 = top_pos[0] + top_rad * math.sin(angle)
+    y0 = top_pos[1] + top_rad * math.cos(angle)
     hose_control_points.append((x0, y0))
     # fourth point is opposite tangent
     x1, y1 = 0, -(bot_inner_rad + r1)
@@ -104,18 +104,77 @@ def kidney_shape(
     beta = math.asin((r2 - r1) / math.sqrt(
         (x2 - x1) ** 2 + (y2 - y1) ** 2
     ))
-    alpha = gamma - beta
+    alpha = gamma + beta
     x3 = x1 - r1 * math.sin(alpha)
     y3 = y1 - r1 * math.cos(alpha)
     x4 = x2 - r2 * math.sin(alpha)
     y4 = y2 - r2 * math.cos(alpha)
     kidney_control_points.append((x3, y3))
     hose_control_points.append((x4, y4))
-
+    print(kidney_control_points)
+    # so let's try fluent api first
+    # clockwise
+    kidney_points = [
+        kidney_control_points[0]
+        , (bot_inner_rad, 0)
+        , kidney_control_points[1]
+        , (bot_outer_rad, 0)
+        , kidney_control_points[2]
+        , (0, -bot_outer_rad)
+        , kidney_control_points[3]
+        , (0, -bot_inner_rad)
+    ]
+    temp_k = (cq.Workplane()
+        .moveTo(*kidney_points[0])
+        .radiusArc(kidney_points[1], -bot_inner_rad)
+        .radiusArc(kidney_points[2], r1)
+        .radiusArc(kidney_points[3], r1)
+        .radiusArc(kidney_points[4], bot_outer_rad)
+        .radiusArc(kidney_points[5], bot_outer_rad)
+        .radiusArc(kidney_points[6], r1)
+        .radiusArc(kidney_points[7], r1)
+        .radiusArc(kidney_points[0], -bot_inner_rad)
+    )
+    kidney_wire = temp_k.wire().val()
+    # now to evenly space points on the hose circle
+    kidney_edges = kidney_wire.Edges()
+    hose_points = [hose_control_points[0]]
+    for idx in range(4):
+        # how long is the edge from control point 0 to 1?
+        length_first_section = kidney_edges[2 * idx % 8].Length()
+        length_control_point_section = length_first_section + kidney_edges[(2 * idx + 1) % 8].Length()
+        proportion = length_first_section / length_control_point_section
+        # create an arc for subdividing
+        hose_control_point_section = (
+            cq
+            .Workplane('XY', origin=(0, 0, top_pos[2]))
+            .moveTo(*hose_control_points[idx])
+            .radiusArc(hose_control_points[(idx + 1) % 4], r2)
+            .val()
+        )
+        point = hose_control_point_section.positionAt(proportion).toTuple()
+        hose_points.append(point)
+        hose_points.append(hose_control_points[(idx + 1) % 4])
+    hose_wire = (
+        cq
+        .Workplane('XY', origin=(0, 0, top_pos[2]))
+        .moveTo(*hose_control_points[0])
+    )
+    for point in hose_points[1:]:
+        hose_wire = hose_wire.radiusArc((point[0], point[1]), r2)
+    hose_wire = hose_wire.wire().val()
+    # return cq.Workplane(kidney_wire), cq.Workplane(hose_wire)
+    return kidney_wire, hose_wire
 
 
 inner_port_major_rad = dims.vac.inner_rad + dims.vac.wall_thick
 outer_port_major_rad = inner_port_major_rad + dims.vac.port.rad * 2
+
+kidney_wire, hose_wire = kidney_and_circle_wires(dims.vac.hose.id, dims.vac.hose.plane.origin, inner_port_major_rad, outer_port_major_rad)
+
+vert_face = cq.Face.makeRuledSurface(kidney_wire, hose_wire)
+show_object(vert_face)
+
 bottom_wire = (
     cq
     .Workplane()
