@@ -6,13 +6,13 @@ import spindle as spindle_module
 import vac_brack as vac_brack_module
 import vac as vac_module
 import dims
-# import importlib
-# importlib.reload(dims)
-# importlib.reload(clamp_module)
-# importlib.reload(bracket_module)
-# importlib.reload(spindle_module)
-# importlib.reload(vac_brack_module)
-# importlib.reload(vac_module)
+import importlib
+importlib.reload(dims)
+importlib.reload(clamp_module)
+importlib.reload(bracket_module)
+importlib.reload(spindle_module)
+importlib.reload(vac_brack_module)
+importlib.reload(vac_module)
 
 assy = cq.Assembly()
 
@@ -46,29 +46,19 @@ backpoint2 = back.faces("<Z", tag="unslotted").edges("<Y").vertices(">X").val()
 vac_brack_point = vac_brack.faces("<Z").edges(">Y").vertices(">X").val()
 assy.constrain("back", backpoint2, "vac_brack", vac_brack_point, "Point")
 assy.constrain("back@faces@<Z", "vac_brack@faces@>Z", "Axis")
+assy.constrain("back", back.faces("<Y", tag="unslotted").val(), "vac_brack", vac_brack.faces(">Y").val(), "Axis")
 
-# clamp = (
-#     clamp_module.clamp
-#     .clean()
-#     .rotate((0, 0, 0), (0, 0, 1), 180)
-#     .translate(dims.assembly.clamp.offset)
-# )
-# bracket = (
-#     bracket_module.bracket
-#     .translate(dims.assembly.bracket.offset)
-# )
-# spindle = (
-#     spindle_module.spindle
-#     .translate(dims.assembly.spindle.offset)
-# )
-# vac_brack = (
-#     vac_brack_module.bracket
-#     .translate(dims.assembly.vac_brack.offset)
-# )
-# vac = (
-#     vac_module.part
-#     .translate(dims.assembly.vac.offset)
-# )
+vac = vac_module.part
+assy.add(vac, name="vac", color=cq.Color(0.3, 0.2, 0.3, 0.8))
+vac_brack_front_bottom_left = vac_brack.faces("<Y").edges("<X").vertices("<Z").val()
+vac_back_bottom_left = vac.faces(">Y", tag="base").edges("<X").vertices("<Z").val()
+assy.constrain("vac_brack", vac_brack_front_bottom_left, "vac", vac_back_bottom_left, "Point")
+assy.constrain("vac_brack", vac_brack.faces("<Y").val(), "vac", vac.faces(">Y", tag="base").val(), "Axis")
+assy.constrain("vac_brack", vac_brack.faces("<Z").val(), "vac", vac.faces("<Z").val(), "Axis", param=0)
 
-assy.solve()
+try:
+    assy.solve()
+except Exception as e:
+    print(e)
+    raise e
 show_object(assy)

@@ -221,7 +221,36 @@ part = (
     )
     .close()
     .extrude(dims.vac.z)
+    .tag('base')
+    .faces(">Y")
+    .workplane(centerOption='ProjectedOrigin', origin=(0, 0, dims.vac.z / 2))
+    .pushPoints([(-pos, 0) for pos in dims.vac_brack.holes])
+    .circle(dims.vac_brack.hole.cbore_diam / 2 - 0.1)
+    .extrude(dims.vac_brack.hole.cbore_depth - 2, taper=10)
 )
+cutters = []
+for pos in dims.magnet.positions:
+    selector = ">Z" if pos[1] >= 0 else "<Z"
+    inverse_selector = "<Z" if pos[1] >= 0 else ">Z"
+    cut_depth = dims.vac.z / 2 - max([y for _, y in dims.magnet.positions])
+    temp = (
+        part
+        .faces(selector, tag='base')
+        .workplane(centerOption='ProjectedOrigin', origin=(0, dims.vac.mount_face.y - dims.magnet.wall_thick - dims.magnet.slot.thick / 2, 0))
+        .move(pos[0], 0)
+        .rect(dims.magnet.slot.width, dims.magnet.slot.thick, centered=True)
+        .extrude(-cut_depth, combine=False)
+        .faces(inverse_selector)
+        .workplane()
+        .center(0, -dims.magnet.slot.thick / 2)
+        .rect(dims.magnet.slot.width / 2, dims.magnet.slot.thick, centered=False)
+        .revolve(axisEnd=(0, 1))
+    )
+    cutters.append(temp)
+    del temp
+for cutter in cutters:
+    part = part.cut(cutter)
+    del cutter
 
 # This has to become a long pipe with a ring on the end to sit in the upper vac
 # mount
