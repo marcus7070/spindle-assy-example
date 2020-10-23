@@ -101,6 +101,9 @@ vac.port.rad = vac.hose.id / 2 * 1.2
 vac.brush = d()
 vac.brush.slot_width = 5.5
 vac.brush.slot_depth = 10  # brush has 20mm canvas on top
+vac.chimney = d()
+vac.chimney.main_od = vac.hose.id + vac.wall_thick * 2
+vac.chimney.height = 100
 
 
 magnet = d()

@@ -111,7 +111,6 @@ def kidney_and_circle_wires(
     y4 = y2 - r2 * math.cos(alpha)
     kidney_control_points.append((x3, y3))
     hose_control_points.append((x4, y4))
-    print(kidney_control_points)
     # so let's try fluent api first
     # clockwise
     kidney_points = [
@@ -170,49 +169,21 @@ def kidney_and_circle_wires(
 inner_port_major_rad = dims.vac.inner_rad + dims.vac.wall_thick
 outer_port_major_rad = inner_port_major_rad + dims.vac.port.rad * 2
 
-kidney_wire, hose_wire = kidney_and_circle_wires(dims.vac.hose.id, dims.vac.hose.plane.origin, inner_port_major_rad, outer_port_major_rad)
+kidney_wire, hose_wire = kidney_and_circle_wires(dims.vac.hose.id / 2, dims.vac.hose.plane.origin, inner_port_major_rad, outer_port_major_rad)
 
 vert_face = cq.Face.makeRuledSurface(kidney_wire, hose_wire)
-show_object(vert_face)
 
-bottom_wire = (
+bottom_face = cq.Face.makeFromWires(kidney_wire)
+top_wire = (
     cq
-    .Workplane()
-    .moveTo(inner_port_major_rad, 0)
-    .radiusArc(
-        (outer_port_major_rad, 0)
-        , radius=dims.vac.port.rad
-    )
-    .radiusArc((0, -outer_port_major_rad), radius=outer_port_major_rad)
-    .radiusArc((0, -inner_port_major_rad), radius=dims.vac.port.rad)
-    .radiusArc((inner_port_major_rad, 0), radius=-inner_port_major_rad)
+    .Workplane('XY', origin=dims.vac.hose.plane.origin)
+    .circle(dims.vac.hose.id / 2)
     .wire()
     .val()
 )
-offset = dims.vac.hose.id / 2 * math.sin(math.pi / 4)
-top_edge_angles = (
-    (67.5, 135)
-    , (135, 315)
-    , (315, 22.5)
-    , (22.5, 67.5)
-)
-top_edges = [
-    cq.Edge.makeCircle(
-        dims.vac.hose.id / 2
-        , dims.vac.hose.plane.origin
-        # , (inner_port_major_rad, -inner_port_major_rad, 20)
-        , dir=(0, 0, -1)
-        , angle1=a1
-        , angle2=a2
-    ) for a1, a2 in top_edge_angles
-]
-top_wire = cq.Wire.assembleEdges(top_edges)
-vert_face = cq.Face.makeRuledSurface(bottom_wire, top_wire)
-# show_object(vert_face)
-bottom_face = cq.Face.makeFromWires(bottom_wire)
 top_face = cq.Face.makeFromWires(top_wire)
+
 shell = cq.Shell.makeShell([bottom_face, vert_face, top_face])
-# show_object(shell)
 vacuum_path = cq.Workplane(cq.Solid.makeSolid(shell))
 
 part = (
@@ -231,6 +202,9 @@ yc = -inner_port_major_rad - dims.vac.port.rad
 r_outer = dims.vac.port.rad + dims.vac.wall_thick + dims.vac.brush.slot_width + dims.vac.wall_thick
 # to get to that radius, the line must extend horizontally until
 x_start = math.sqrt(r_outer ** 2 - (dims.vac.port.rad + dims.vac.wall_thick) ** 2)
+# inner radius of the kidney shape
+rk_inner = abs(yc) - dims.vac.port.rad - dims.vac.wall_thick
+rk_outer = rk_inner + dims.vac.port.rad + r_outer
 part = (
     part
     .spline(
@@ -238,8 +212,8 @@ part = (
         , tangents=[(-1, 0), (0, -1)]
         , includeCurrent=True
     )
-    .radiusArc((0, yc - dims.vac.port.rad - dims.vac.wall_thick - dims.vac.brush.slot_width - dims.vac.wall_thick), -(dims.vac.port.rad + dims.vac.wall_thick + dims.vac.brush.slot_width + dims.vac.wall_thick))
-    .radiusArc((outer_port_major_rad + dims.vac.wall_thick + dims.vac.brush.slot_width + dims.vac.wall_thick, 0), -(outer_port_major_rad + dims.vac.wall_thick + dims.vac.brush.slot_width + dims.vac.wall_thick))
+    .radiusArc((0, -rk_outer), -r_outer)
+    .radiusArc((rk_outer, 0), -rk_outer)
     .spline(
         [(dims.vac.mount_face.x_max, dims.vac.mount_face.y)]
         , tangents=[(0, 1), (-1, 0)]
@@ -247,202 +221,47 @@ part = (
     )
     .close()
     .extrude(dims.vac.z)
-    # .wire()
 )
 
-hose_adaptor = (
+# This has to become a long pipe with a ring on the end to sit in the upper vac
+# mount
+chimney = (
     cq
     .Workplane('XY', origin=dims.vac.hose.plane.origin)
-    .circle(dims.vac.hose.socket.od / 2)
-    .extrude(dims.vac.hose.insertion)
+    .circle(dims.vac.chimney.main_od / 2)
+    .extrude(dims.vac.chimney.height)
+    .faces('>Z')
+    .workplane()
+    .hole(dims.vac.hose.id, dims.vac.chimney.height)
 )
-# upper_spline = [
-#     cq.Vector(
-#         dims.vac.hose.plane.origin[0] + dims.vac.hose.socket.od / 2 + 2
-#         , dims.vac.hose.plane.origin[1]
-#     ), cq.Vector(
-#         dims.vac.hose.plane.origin[0]
-#         , dims.vac.hose.plane.origin[1] - dims.vac.hose.socket.od / 2 - 2
-#     ), cq.Vector(
-#         dims.vac.mount_face.x_max * math.cos(math.radians(180 + 45))
-#         , dims.vac.mount_face.x_max * math.sin(math.radians(180 + 45))
-#     )
-# ]
-# lower_spline = [
-#     (upper_spline[0] + cq.Vector(dims.vac.mount_face.x_max, 0, 0)) / 2
-#     , (upper_spline[1] + cq.Vector(-dims.vac.hose.socket.od / 2, -dims.vac.hose.socket.od / 2, 0)) / 2
-#     , upper_spline[2]
-# ]
-# 
-# part = (
-#     cq
-#     .Workplane()
-#     .moveTo(dims.vac.mount_face.x_min, dims.vac.mount_face.y)
-#     .hLineTo(dims.vac.mount_face.x_max)
-#     .lineTo(lower_spline[0].x, lower_spline[0].y)
-# )
-# # # an arc around the spindle axis with radius dims.vac.mount_face.x_max
-# start_tangent = part.val().tangentAt(1)
-# end_tangent = cq.Vector(-1, 1, 0).normalized()
-# part = (
-#     part
-#     .spline(
-#         listOfXYTuple=lower_spline
-#         , tangents=(start_tangent, end_tangent)
-#     )
-# )
-# radius = dims.vac.inner_rad
-# endangle = math.radians(180 + 45)
-# endpoint = (
-#     radius * math.cos(endangle)
-#     , radius * math.sin(endangle)
-# )
-# part = (
-#     part
-#     .lineTo(*endpoint)
-#     .threePointArc(
-#         (radius, 0)
-#         , (endpoint[0], -endpoint[1])
-#     )
-#     .close()
-# )
-# part = (
-#     part
-#     .copyWorkplane(cq.Workplane("XY", origin=(0, 0, dims.vac.z)))
-#     .moveTo(dims.vac.mount_face.x_min, dims.vac.mount_face.y)
-#     .hLineTo(dims.vac.mount_face.x_max)
-#     .lineTo(upper_spline[0].x, upper_spline[0].y)
-# )
-# start_tangent = part.val().tangentAt(1)
-# end_tangent = cq.Vector(-1, 1, 0).normalized()
-# part = (
-#     part
-#     .spline(
-#         listOfXYTuple=upper_spline
-#         , tangents=(start_tangent, end_tangent)
-#     )
-#     .lineTo(
-#         dims.vac.inner_rad * math.cos(math.radians(180 + 45))
-#         , dims.vac.inner_rad * math.sin(math.radians(180 + 45))
-#     )
-#     .threePointArc(
-#         (dims.vac.inner_rad, 0)
-#         , (
-#             dims.vac.inner_rad * math.cos(math.radians(180 + 45))
-#             , -dims.vac.inner_rad * math.sin(math.radians(180 + 45))
-#         )
-#     )
-#     .close()
-#     .loft()
-#     .tag('base')
-#     .faces(">Z")
-#     .workplane(centerOption='ProjectedOrigin', origin=(0, 0, 0))
-#     .hole(dims.spindle.bearing_cap.diam + 2, dims.spindle.bearing_cap.height + 2)
-#     .copyWorkplane(cq.Workplane("XY"))
-#     .transformed(offset=dims.vac.hose.plane.origin)
-#     .circle(dims.vac.hose.socket.od / 2)
-#     .extrude(dims.vac.hose.insertion)
-#     .faces(">Z")
-#     .workplane()
-#     .tag('hose_bottom')
-#     .hole(dims.vac.hose.od, dims.vac.hose.insertion - dims.vac.wall_thick)
-#     .workplaneFromTagged('hose_bottom')
-#     .hole(dims.vac.hose.id, dims.vac.hose.insertion)
-#     .workplaneFromTagged('hose_bottom')
-#     .polygon(4, dims.vac.hose.socket.od)
-#     .extrude(dims.vac.hose.tape_width)
-#     .faces(">Z")
-#     .workplane()
-#     .hole(dims.vac.hose.od + 2, dims.vac.hose.tape_width)
-# )
-# 
-# vac_path = (
-#     cq
-#     .Workplane()
-#     .moveTo(dims.vac.mount_face.x_max, dims.vac.mount_face.y)
-#     .lineTo(lower_spline[0].x, lower_spline[0].y)
-# )
-# # # an arc around the spindle axis with radius dims.vac.mount_face.x_max
-# start_tangent = vac_path.val().tangentAt(1)
-# end_tangent = cq.Vector(-1, 1, 0).normalized()
-# vac_path = (
-#     vac_path
-#     .spline(
-#         listOfXYTuple=lower_spline
-#         , tangents=(start_tangent, end_tangent)
-#     )
-# )
-# radius = dims.vac.inner_rad
-# endangle = math.radians(180 + 45)
-# endpoint = (
-#     radius * math.cos(endangle)
-#     , radius * math.sin(endangle)
-# )
-# vac_path = (
-#     vac_path
-#     .lineTo(*endpoint)
-# )
-# endangle = math.radians(45)
-# vac_path = (
-#     vac_path
-#     .threePointArc(
-#         (radius, 0)
-#         , (radius * math.cos(endangle), radius * math.sin(endangle))
-#     )
-#     .close()
-#     .offset2D(-dims.vac.wall_thick)
-#     .copyWorkplane(cq.Workplane("XY"))
-#     .transformed(offset=dims.vac.hose.plane.origin)
-#     .circle(dims.vac.hose.id / 2)
-#     .loft()
-# )
-# part = (
-#     part
-#     .cut(vac_path)
-#     .faces(">Y")
-#     .workplane(centerOption='ProjectedOrigin', origin=(0, 0, dims.vac.z / 2))
-#     .pushPoints([(-pos, 0) for pos in dims.vac_brack.holes])
-#     .circle(dims.vac_brack.hole.cbore_diam / 2 - 0.1)
-#     .extrude(dims.vac_brack.hole.cbore_depth - 2, taper=10)
-# )
-# cutters = []
-# for pos in dims.magnet.positions:
-#     selector = ">Z" if pos[1] >= 0 else "<Z"
-#     inverse_selector = "<Z" if pos[1] >= 0 else ">Z"
-#     cut_depth = dims.vac.z / 2 - max([y for _, y in dims.magnet.positions])
-#     temp = (
-#         part
-#         .faces(selector, tag='base')
-#         .workplane(centerOption='ProjectedOrigin', origin=(0, dims.vac.mount_face.y - dims.magnet.wall_thick - dims.magnet.slot.thick / 2, 0))
-#         .move(pos[0], 0)
-#         .rect(dims.magnet.slot.width, dims.magnet.slot.thick, centered=True)
-#         .extrude(-cut_depth, combine=False)
-#         .faces(inverse_selector)
-#         .workplane()
-#         .center(0, -dims.magnet.slot.thick / 2)
-#         .rect(dims.magnet.slot.width / 2, dims.magnet.slot.thick, centered=False)
-#         .revolve(axisEnd=(0, 1))
-#     )
-#     cutters.append(temp)
-# outer_cutter = (
-#     cq
-#     .Workplane()
-#     .moveTo(dims.vac.hose.plane.origin[0] + dims.vac.hose.socket.od / 2 + 1e-4, 20)
-#     .vLineTo(upper_spline[0].y)
-#     .radiusArc((
-#             dims.vac.hose.plane.origin[0]
-#             , dims.vac.hose.plane.origin[1] - dims.vac.hose.socket.od / 2 - 1e-4
-#         )
-#         , dims.vac.hose.socket.od / 2 + 1e-4)
-#     .hLine(-100)
-#     .vLine(-20)
-#     .hLine(200)
-#     .close()
-#     .extrude(dims.vac.z + 5)
-# )
-# # cutters.append(outer_cutter)  # removes the top surface, fuck it
-# for cutter in cutters:
-#     part = part.cut(cutter)
-# del cutter, temp, vac_path, outer_cutter
 
+kidney_wire, hose_wire = kidney_and_circle_wires(dims.vac.chimney.main_od / 2 + dims.vac.wall_thick, dims.vac.hose.plane.origin, rk_inner, rk_outer)
+vert_face = cq.Face.makeRuledSurface(kidney_wire, hose_wire)
 
+bottom_face = cq.Face.makeFromWires(kidney_wire)
+top_wire = (
+    cq
+    .Workplane('XY', origin=dims.vac.hose.plane.origin)
+    .circle(dims.vac.chimney.main_od / 2 + dims.vac.wall_thick)
+    .wire()
+    .val()
+)
+top_face = cq.Face.makeFromWires(top_wire)
+shell = cq.Shell.makeShell([bottom_face, vert_face, top_face])
+vacuum_port_walls = cq.Solid.makeSolid(shell)
+upper_vac = (
+    cq.Workplane('XY', origin=dims.vac.hose.plane.origin)
+    .circle(dims.vac.chimney.main_od / 2 + dims.vac.wall_thick)
+    .extrude(dims.vac.wall_thick)
+    .tag('base')
+    .faces('>Z')
+    .workplane()
+    .hole(dims.vac.chimney.main_od, dims.vac.wall_thick)
+    .faces('>Z', tag='base')
+    .workplane()
+    .hole(dims.vac.hose.id)
+    .union(vacuum_port_walls)
+)
+
+part = part.union(upper_vac).cut(vacuum_path)
+# del vacuum_port_walls, hose_adaptor, vacuum_path
