@@ -227,6 +227,9 @@ part = (
     .pushPoints([(-pos, 0) for pos in dims.vac_brack.holes])
     .circle(dims.vac_brack.hole.cbore_diam / 2 - 0.1)
     .extrude(dims.vac_brack.hole.cbore_depth - 2, taper=10)
+    .faces(">Z", tag='base')
+    .workplane(centerOption='ProjectedOrigin', origin=(0, 0, 0))
+    .hole(dims.spindle.bearing_cap.diam + 2, dims.spindle.bearing_cap.height + 2)
 )
 cutters = []
 for pos in dims.magnet.positions:
@@ -292,5 +295,24 @@ upper_vac = (
     .union(vacuum_port_walls)
 )
 
-part = part.union(upper_vac).cut(vacuum_path)
-# del vacuum_port_walls, hose_adaptor, vacuum_path
+brush_offset = dims.vac.wall_thick + dims.vac.brush.slot_width / 2
+r_brush_to_port = dims.vac.port.rad + brush_offset
+brush_slot_path = (
+    cq
+    .Workplane()
+    .moveTo(dims.vac.mount_face.x_min, r_brush_to_port)
+    .hLineTo(abs(yc))
+    .tangentArcPoint((outer_port_major_rad + brush_offset, 0), relative=False)
+    .tangentArcPoint((0, -outer_port_major_rad - brush_offset), relative=False)
+    .tangentArcPoint((-r_brush_to_port, r_brush_to_port), relative=True)
+)
+brush_slot = (
+    cq
+    .Workplane('XZ', origin=brush_slot_path.val().endPoint())
+    .center(0, dims.vac.brush.slot_depth / 2)
+    .rect(dims.vac.brush.slot_width, dims.vac.brush.slot_depth, centered=True)
+    .sweep(brush_slot_path)
+)
+
+part = part.union(upper_vac).cut(vacuum_path).cut(brush_slot)
+del vacuum_path, upper_vac, brush_slot_path, brush_slot
