@@ -204,7 +204,8 @@ r_outer = dims.vac.port.rad + dims.vac.wall_thick + dims.vac.brush.slot_width + 
 x_start = math.sqrt(r_outer ** 2 - (dims.vac.port.rad + dims.vac.wall_thick) ** 2)
 # inner radius of the kidney shape
 rk_inner = abs(yc) - dims.vac.port.rad - dims.vac.wall_thick
-rk_outer = rk_inner + dims.vac.port.rad + r_outer
+# rk_outer = rk_inner + dims.vac.port.rad + r_outer
+rk_outer = abs(yc) + r_outer + 5
 part = (
     part
     .spline(
