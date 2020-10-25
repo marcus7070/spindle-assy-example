@@ -303,8 +303,8 @@ brush_slot_path = (
     .Workplane()
     .moveTo(dims.vac.mount_face.x_min, r_brush_to_port)
     .hLineTo(abs(yc))
-    .tangentArcPoint((outer_port_major_rad + brush_offset, 0), relative=False)
-    .tangentArcPoint((0, -outer_port_major_rad - brush_offset), relative=False)
+    .tangentArcPoint((rk_outer - brush_offset, 0), relative=False)
+    .tangentArcPoint((0, -rk_outer + brush_offset), relative=False)
     .tangentArcPoint((-r_brush_to_port, r_brush_to_port), relative=True)
 )
 brush_slot = (
@@ -315,5 +315,5 @@ brush_slot = (
     .sweep(brush_slot_path)
 )
 
-part = part.union(upper_vac).cut(vacuum_path).cut(brush_slot)
-del vacuum_path, upper_vac, brush_slot_path, brush_slot
+part = part.union(upper_vac).cut(vacuum_path)  #.cut(brush_slot)
+del vacuum_path, upper_vac, # brush_slot_path, brush_slot
