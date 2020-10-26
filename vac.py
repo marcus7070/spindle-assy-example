@@ -9,6 +9,7 @@ import importlib
 import math
 import cadquery as cq
 import dims
+from itertools import cycle
 importlib.reload(dims)
 
 # ##########################################################################
@@ -34,6 +35,13 @@ importlib.reload(dims)
 # bottom face is cq.Face.makeFromWire(bottom_wire)
 # vertical face is cq.Face.makeRuledSurface(top_wire, bottom_wire)
 # then make shell, solid, cut
+
+
+def get_angle(centre, point):
+    x = point[0] - centre[0]
+    y = point[1] - centre[1]
+    return math.atan2(y, x)
+
 
 def kidney_and_circle_wires(
         top_rad
@@ -111,31 +119,48 @@ def kidney_and_circle_wires(
     y4 = y2 - r2 * math.cos(alpha)
     kidney_control_points.append((x3, y3))
     hose_control_points.append((x4, y4))
-    # so let's try fluent api first
     # clockwise
+    # need two flows here, one for if the tangential control point on the kidney is above the y axis (in which case it comes first) and another for if it is below the y axis
+    # lets rewrite this for point, radius
     kidney_points = [
-        kidney_control_points[0]
-        , (bot_inner_rad, 0)
-        , kidney_control_points[1]
-        , (bot_outer_rad, 0)
-        , kidney_control_points[2]
-        , (0, -bot_outer_rad)
-        , kidney_control_points[3]
-        , (0, -bot_inner_rad)
+        (kidney_control_points[0], None),
+        ((bot_inner_rad, 0), -bot_inner_rad),
     ]
-    temp_k = (cq.Workplane()
-        .moveTo(*kidney_points[0])
-        .radiusArc(kidney_points[1], -bot_inner_rad)
-        .radiusArc(kidney_points[2], r1)
-        .radiusArc(kidney_points[3], r1)
-        .radiusArc(kidney_points[4], bot_outer_rad)
-        .radiusArc(kidney_points[5], bot_outer_rad)
-        .radiusArc(kidney_points[6], r1)
-        .radiusArc(kidney_points[7], r1)
-        .radiusArc(kidney_points[0], -bot_inner_rad)
-    )
+    # kidney_points = [kidney_control_points[0], (bot_inner_rad, 0)]
+    if kidney_control_points[1][1] > 0:
+        kidney_points.extend([
+            (kidney_control_points[1], r1),
+            ((bot_outer_rad, 0), r1),
+        ])
+    else:
+        kidney_points.extend([
+            ((bot_outer_rad, 0), r1), 
+            (kidney_control_points[1], bot_outer_rad)
+        ])
+    kidney_points.append((kidney_control_points[2], bot_outer_rad))
+    # same reordering as above
+    if kidney_control_points[3][0] > 0:
+        kidney_points.extend([
+            ((0, -bot_outer_rad), bot_outer_rad), 
+            (kidney_control_points[3], r1),
+        ])
+    else:
+        kidney_points.extend([
+            (kidney_control_points[3], bot_outer_rad), 
+            ((0, -bot_outer_rad), bot_outer_rad)
+        ])
+    kidney_points.append(((0, -bot_inner_rad), r1))
+    kidney_points.append((kidney_points[0][0], -bot_inner_rad))
+    temp_k = cq.Workplane().moveTo(*kidney_points[0][0])
+    for point, radius in kidney_points[1:]:
+        print(point)
+        print(radius)
+        temp_k = temp_k.radiusArc(point, radius)
+    del point, radius
     kidney_wire = temp_k.wire().val()
     # now to evenly space points on the hose circle
+    # still have TODO the sort depending on which side the kidney tangent
+    # points wound up on
     kidney_edges = kidney_wire.Edges()
     hose_points = [hose_control_points[0]]
     for idx in range(4):
@@ -160,14 +185,26 @@ def kidney_and_circle_wires(
         .moveTo(*hose_control_points[0])
     )
     for point in hose_points[1:]:
+        # print(f"reduced point = {point[0] - top_pos[0]}, {point[1] - top_pos[1]}")
         hose_wire = hose_wire.radiusArc((point[0], point[1]), r2)
     hose_wire = hose_wire.wire().val()
     # return cq.Workplane(kidney_wire), cq.Workplane(hose_wire)
     return kidney_wire, hose_wire
 
 
+# some dimensions:
 inner_port_major_rad = dims.vac.inner_rad + dims.vac.wall_thick
 outer_port_major_rad = inner_port_major_rad + dims.vac.port.rad * 2
+brush_slot_major_radius = (
+    outer_port_major_rad + dims.vac.wall_thick
+    + 15 + dims.vac.brush.slot_width / 2
+)
+body_major_radius = (
+    brush_slot_major_radius + dims.vac.brush.slot_width / 2
+    + dims.vac.wall_thick
+)
+# the width of material between the edge of the vacuum port and outer edge
+vac_port_to_body_outer = (body_major_radius - outer_port_major_rad)
 
 kidney_wire, hose_wire = kidney_and_circle_wires(dims.vac.hose.id / 2, dims.vac.hose.plane.origin, inner_port_major_rad, outer_port_major_rad)
 
@@ -199,13 +236,13 @@ part = (
 # y centre of the circle
 yc = -inner_port_major_rad - dims.vac.port.rad
 # radius of outer edge
-r_outer = dims.vac.port.rad + dims.vac.wall_thick + dims.vac.brush.slot_width + dims.vac.wall_thick
+# r_outer = dims.vac.port.rad + dims.vac.wall_thick + dims.vac.brush.slot_width + dims.vac.wall_thick
+r_outer = dims.vac.port.rad + vac_port_to_body_outer
 # to get to that radius, the line must extend horizontally until
 x_start = math.sqrt(r_outer ** 2 - (dims.vac.port.rad + dims.vac.wall_thick) ** 2)
 # inner radius of the kidney shape
 rk_inner = abs(yc) - dims.vac.port.rad - dims.vac.wall_thick
 # rk_outer = rk_inner + dims.vac.port.rad + r_outer
-rk_outer = abs(yc) + r_outer + 5
 part = (
     part
     .spline(
@@ -213,8 +250,8 @@ part = (
         , tangents=[(-1, 0), (0, -1)]
         , includeCurrent=True
     )
-    .radiusArc((0, -rk_outer), -r_outer)
-    .radiusArc((rk_outer, 0), -rk_outer)
+    .radiusArc((0, -body_major_radius), -r_outer)
+    .radiusArc((body_major_radius, 0), -body_major_radius)
     .spline(
         [(dims.vac.mount_face.x_max, dims.vac.mount_face.y)]
         , tangents=[(0, 1), (-1, 0)]
@@ -256,19 +293,19 @@ for cutter in cutters:
     part = part.cut(cutter)
     del cutter
 
-# This has to become a long pipe with a ring on the end to sit in the upper vac
-# mount
-chimney = (
-    cq
-    .Workplane('XY', origin=dims.vac.hose.plane.origin)
-    .circle(dims.vac.chimney.main_od / 2)
-    .extrude(dims.vac.chimney.height)
-    .faces('>Z')
-    .workplane()
-    .hole(dims.vac.hose.id, dims.vac.chimney.height)
-)
+# # This has to become a long pipe with a ring on the end to sit in the upper vac
+# # mount
+# chimney = (
+#     cq
+#     .Workplane('XY', origin=dims.vac.hose.plane.origin)
+#     .circle(dims.vac.chimney.main_od / 2)
+#     .extrude(dims.vac.chimney.height)
+#     .faces('>Z')
+#     .workplane()
+#     .hole(dims.vac.hose.id, dims.vac.chimney.height)
+# )
 
-kidney_wire, hose_wire = kidney_and_circle_wires(dims.vac.chimney.main_od / 2 + dims.vac.wall_thick, dims.vac.hose.plane.origin, rk_inner, rk_outer)
+kidney_wire, hose_wire = kidney_and_circle_wires(dims.vac.chimney.main_od / 2 + dims.vac.wall_thick, dims.vac.hose.plane.origin, rk_inner, body_major_radius)
 vert_face = cq.Face.makeRuledSurface(kidney_wire, hose_wire)
 
 bottom_face = cq.Face.makeFromWires(kidney_wire)
@@ -293,7 +330,7 @@ upper_vac = (
     .faces('>Z', tag='base')
     .workplane()
     .hole(dims.vac.hose.id)
-    .union(vacuum_port_walls)
+    .union(vacuum_port_walls, clean=False, tol=0.1)
 )
 
 brush_offset = dims.vac.wall_thick + dims.vac.brush.slot_width / 2
@@ -303,8 +340,12 @@ brush_slot_path = (
     .Workplane()
     .moveTo(dims.vac.mount_face.x_min, r_brush_to_port)
     .hLineTo(abs(yc))
-    .tangentArcPoint((rk_outer - brush_offset, 0), relative=False)
-    .tangentArcPoint((0, -rk_outer + brush_offset), relative=False)
+    .spline(
+        [(brush_slot_major_radius, 0)],
+        tangents=[(1, 0), (0, -1)],
+        includeCurrent=True,
+    )
+    .tangentArcPoint((0, -brush_slot_major_radius), relative=False)
     .tangentArcPoint((-r_brush_to_port, r_brush_to_port), relative=True)
 )
 brush_slot = (
@@ -315,5 +356,5 @@ brush_slot = (
     .sweep(brush_slot_path)
 )
 
-part = part.union(upper_vac).cut(vacuum_path)  #.cut(brush_slot)
-del vacuum_path, upper_vac, # brush_slot_path, brush_slot
+part = part.union(upper_vac).cut(vacuum_path).cut(brush_slot)
+# del vacuum_path, upper_vac, # brush_slot_path, brush_slot
