@@ -119,15 +119,16 @@ def kidney_and_circle_wires(
     y4 = y2 - r2 * math.cos(alpha)
     kidney_control_points.append((x3, y3))
     hose_control_points.append((x4, y4))
-    # clockwise
+    # clockwise when looking from above
     # need two flows here, one for if the tangential control point on the kidney is above the y axis (in which case it comes first) and another for if it is below the y axis
-    # lets rewrite this for point, radius
+    kcp_pos_y = kidney_control_points[1][1] > 0
+    kcp_pos_x = kidney_control_points[3][0] > 0
+    # kidney points is in the form [ (point, radius) ]
     kidney_points = [
         (kidney_control_points[0], None),
         ((bot_inner_rad, 0), -bot_inner_rad),
     ]
-    # kidney_points = [kidney_control_points[0], (bot_inner_rad, 0)]
-    if kidney_control_points[1][1] > 0:
+    if kcp_pos_y:
         kidney_points.extend([
             (kidney_control_points[1], r1),
             ((bot_outer_rad, 0), r1),
@@ -139,7 +140,7 @@ def kidney_and_circle_wires(
         ])
     kidney_points.append((kidney_control_points[2], bot_outer_rad))
     # same reordering as above
-    if kidney_control_points[3][0] > 0:
+    if kcp_pos_x:
         kidney_points.extend([
             ((0, -bot_outer_rad), bot_outer_rad), 
             (kidney_control_points[3], r1),
@@ -162,6 +163,12 @@ def kidney_and_circle_wires(
     # still have TODO the sort depending on which side the kidney tangent
     # points wound up on
     kidney_edges = kidney_wire.Edges()
+    # so let's make a map of what has to be done
+    # we have 4 points that have to be positioned
+    # their position falls on 4 wires (constant wires regardless of kcp_pos_x or kcp_pos_y)
+    # but which wire they fall on changes depending on kcp_pos_x or y
+    # [kidney point: (x,y), kidney wire: obj, circle point: [(x, y) or None]]
+    # if circle point is None, then proportion along the kidney wire maps to proportion along the circle edge
     hose_points = [hose_control_points[0]]
     for idx in range(4):
         # how long is the edge from control point 0 to 1?
