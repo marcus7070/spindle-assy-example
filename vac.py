@@ -123,74 +123,109 @@ def kidney_and_circle_wires(
     # need two flows here, one for if the tangential control point on the kidney is above the y axis (in which case it comes first) and another for if it is below the y axis
     kcp_pos_y = kidney_control_points[1][1] > 0
     kcp_pos_x = kidney_control_points[3][0] > 0
-    # kidney points is in the form [ (point, radius) ]
+    # kidney points is in the form [ (point, radius, constant point) ]
+    # constant point are the 4 points that don't move depending on top circle position
     kidney_points = [
-        (kidney_control_points[0], None),
-        ((bot_inner_rad, 0), -bot_inner_rad),
+        (kidney_control_points[0], None, False),
+        ((bot_inner_rad, 0), -bot_inner_rad, True),
     ]
     if kcp_pos_y:
         kidney_points.extend([
-            (kidney_control_points[1], r1),
-            ((bot_outer_rad, 0), r1),
+            (kidney_control_points[1], r1, False),
+            ((bot_outer_rad, 0), r1, True),
         ])
     else:
         kidney_points.extend([
-            ((bot_outer_rad, 0), r1), 
-            (kidney_control_points[1], bot_outer_rad)
+            ((bot_outer_rad, 0), r1, True), 
+            (kidney_control_points[1], bot_outer_rad, False)
         ])
-    kidney_points.append((kidney_control_points[2], bot_outer_rad))
+    kidney_points.append((kidney_control_points[2], bot_outer_rad, False))
     # same reordering as above
     if kcp_pos_x:
         kidney_points.extend([
-            ((0, -bot_outer_rad), bot_outer_rad), 
-            (kidney_control_points[3], r1),
+            ((0, -bot_outer_rad), bot_outer_rad, True), 
+            (kidney_control_points[3], r1, False),
         ])
     else:
         kidney_points.extend([
-            (kidney_control_points[3], bot_outer_rad), 
-            ((0, -bot_outer_rad), bot_outer_rad)
+            (kidney_control_points[3], bot_outer_rad, False), 
+            ((0, -bot_outer_rad), bot_outer_rad, True)
         ])
-    kidney_points.append(((0, -bot_inner_rad), r1))
-    kidney_points.append((kidney_points[0][0], -bot_inner_rad))
+    kidney_points.append(((0, -bot_inner_rad), r1, True))
+    kidney_points.append((kidney_points[0][0], -bot_inner_rad, False))
     temp_k = cq.Workplane().moveTo(*kidney_points[0][0])
-    for point, radius in kidney_points[1:]:
-        print(point)
-        print(radius)
+    for point, radius, _ in kidney_points[1:]:
         temp_k = temp_k.radiusArc(point, radius)
-    del point, radius
+    del point, radius, _
     kidney_wire = temp_k.wire().val()
     # now to evenly space points on the hose circle
     # still have TODO the sort depending on which side the kidney tangent
     # points wound up on
+    # TODO draw a diagram of what needs to be done here. This is a fucking
+    # disaster, consider starting from scratch
     kidney_edges = kidney_wire.Edges()
     # so let's make a map of what has to be done
     # we have 4 points that have to be positioned
     # their position falls on 4 wires (constant wires regardless of kcp_pos_x or kcp_pos_y)
     # but which wire they fall on changes depending on kcp_pos_x or y
-    # [kidney point: (x,y), kidney wire: obj, circle point: [(x, y) or None]]
-    # if circle point is None, then proportion along the kidney wire maps to proportion along the circle edge
     hose_points = [hose_control_points[0]]
-    for idx in range(4):
-        # how long is the edge from control point 0 to 1?
-        length_first_section = kidney_edges[2 * idx % 8].Length()
-        length_control_point_section = length_first_section + kidney_edges[(2 * idx + 1) % 8].Length()
-        proportion = length_first_section / length_control_point_section
-        # create an arc for subdividing
-        hose_control_point_section = (
-            cq
-            .Workplane('XY', origin=(0, 0, top_pos[2]))
-            .moveTo(*hose_control_points[idx])
-            .radiusArc(hose_control_points[(idx + 1) % 4], r2)
-            .val()
-        )
-        point = hose_control_point_section.positionAt(proportion).toTuple()
-        hose_points.append(point)
-        hose_points.append(hose_control_points[(idx + 1) % 4])
+    # for idx in range(4):
+    #     # how long is the edge from control point 0 to 1?
+    #     length_first_section = kidney_edges[2 * idx % 8].Length()
+    #     length_control_point_section = length_first_section + kidney_edges[(2 * idx + 1) % 8].Length()
+    #     proportion = length_first_section / length_control_point_section
+    #     # create an arc for subdividing
+    #     hose_control_point_section = (
+    #         cq
+    #         .Workplane('XY', origin=(0, 0, top_pos[2]))
+    #         .moveTo(*hose_control_points[idx])
+    #         .radiusArc(hose_control_points[(idx + 1) % 4], r2)
+    #         .val()
+    #     )
+    #     point = hose_control_point_section.positionAt(proportion).toTuple()
+    #     hose_points.append(point)
+    #     hose_points.append(hose_control_points[(idx + 1) % 4])
+    # first variable point
+    if kcp_pos_y:
+        kwire = cq.Wire.assembleEdges(kidney_edges[:3])
+    else:
+        kwire = cq.Wire.assembleEdges(kidney_edges[:2])
+    print(f"should be y=0: {kwire.endPoint()}")
+    length_first_section = kidney_edges[0].Length()
+    proportion = length_first_section / kwire.Length()
     hose_wire = (
         cq
         .Workplane('XY', origin=(0, 0, top_pos[2]))
         .moveTo(*hose_control_points[0])
     )
+    hose_points.append(hose_wire.positionAt(proportion))
+    if kcp_pos_y:
+        proportion = (kidney_edges[0].Length() + kidney_edges[1].Length()) / kwire.Length())
+        hose_points.append(hose_wire.positionAt(proportion))
+    # second and possibly third variable point
+    edges = []
+    if not kcp_pos_y:
+        edges.append(kidney_edges[3])
+    edges.append(kidney_edges[4])
+    kwire = cq.Wire.assembleEdges(edges)
+    hose_edge = (
+        cq
+        .Workplane('XY', origin=(0, 0, top_pos[2]))
+        .moveTo(*hose_control_points[1])
+        .radiusArc(hose_control_points[2], r2)
+        .val()
+    )
+    if not kcp_pos_y:
+        length_to_point = kidney_edges[2].Length()
+        proportion length_to_point / kwire.Length()
+        hose_points.append(hose_wire.positionAt(proportion))
+    # middle point
+    hose_points.append(hose_control_points[2])
+    # third variable point
+    if kcp_pos_x:
+
+
+    # create the final hose wire
     for point in hose_points[1:]:
         # print(f"reduced point = {point[0] - top_pos[0]}, {point[1] - top_pos[1]}")
         hose_wire = hose_wire.radiusArc((point[0], point[1]), r2)
