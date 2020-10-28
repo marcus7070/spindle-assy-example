@@ -275,8 +275,41 @@ def kidney_and_circle_wires2(
             )
     kidney_loop.arcs.append(k_arc_4)
 
-    # map points onto circular arc
+    # create circular arc from control points
     circle = Loop()
+    c_arc_0 = Arc(
+            startpoint=circle_normal_point_inner,
+            endpoint=circle_tangent_point_0,
+            radius=top_rad
+            )
+    circle.arcs.append(c_arc_0)
+    c_arc_1 = Arc(
+            startpoint=c_arc_0.endpoint,
+            endpoint=circle_normal_point_outer,
+            radius=top_rad,
+            )
+    circle.arcs.append(c_arc_1)
+    c_arc_2 = Arc(
+            startpoint=c_arc_1.endpoint,
+            endpoint=circle_tangent_point_1,
+            radius=top_rad,
+            )
+    circle.arcs.append(c_arc_2)
+    c_arc_3 = Arc(
+            startpoint=c_arc_2.endpoint,
+            endpoint=c_arc_0.startpoint,
+            radius=top_rad,
+            )
+    circle.arcs.append(c_arc_2)
+
+    # map points onto circular arc
+    # I think I've fucked up defining those kidney arcs. They should go from
+    # normal to tangent points, and the corners where radius changes should be
+    # intermediate points.
+    # for point in kidney_loop.points():
+    #     if point not in circle.points():
+            
+    
 
 
 
