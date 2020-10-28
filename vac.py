@@ -36,6 +36,250 @@ importlib.reload(dims)
 # vertical face is cq.Face.makeRuledSurface(top_wire, bottom_wire)
 # then make shell, solid, cut
 
+# some classes to simplify this kidney/circle shape relationship, since doing
+# this functionally is doing my head in
+class Point:
+    """
+    A point on either the kidney shape or the circle shape.
+    """
+
+    def __init__(self, x=None, y=None, z=None, control_point=False, match=None):
+        """
+        match is a point on the other shape. ruledSurface should draw a line
+        between self and match.
+        """
+        self.x = x
+        self.y = y
+        self.z = z
+        self.control_point = control_point
+        self.match = None
+
+
+class Arc:
+    """
+    All the edges in the kidney shape and circular shape are made of arcs. This
+    class represents an arc.
+    """
+
+    def __init__(
+            self,
+            startpoint=None,
+            endpoint=None,
+            intermediate_points=None,
+            radius=None):
+        """
+        intermediate points is a list of points along this arc, but there is a
+        constant radius between start and endpoint.
+        """
+        self.startpoint = startpoint
+        self.endpoint = endpoint
+        self.intermediate_points = intermediate_points
+        self.radius = radius
+
+    def wire(self):
+        """
+        Returns this arc as a cq.Wire object.
+        """
+        raise NotImplementedError
+
+    def proportions(self):
+        """
+        Calculates the proportion along this wire that the intermediate points
+        are.
+        Returns a list of floats between 0 and 1.
+        """
+        raise NotImplementedError
+
+    def position(self, proportion):
+        """
+        Adds a point to this arc that is proportion between the start and end
+        points.
+        """
+        raise NotImplementedError
+
+
+class Loop:
+    """
+    Either the kidney shape or the circular shape.
+    """
+
+    def __init__(self, arcs=None):
+        if arcs is None:
+            arcs = []
+        self.arcs = arcs
+
+    def check(self):
+        # check that endpoint of one arc is the startpoint of the next
+        # sugggest itertools.cycle for the looping aspect
+        raise NotImplementedError('TODO Loop.check()')
+
+    def wire(self):
+        """
+        Returns all the arcs connected into a cq.Wire
+        """
+        raise NotImplementedError('TODO Loop.wire()')
+
+
+def tangential_points(
+        top_rad,
+        top_pos,
+        port_rad,
+        port_pos,
+        side,
+        ):
+    """
+    Calculate the tangential points between two circles with radius and
+    position described by the arguments. This generates several options, pick
+    the points according to side.
+    """
+    pass
+
+
+def normal_points(
+        top_rad,
+        top_pos,
+        inner_kidney_rad,
+        outer_kidney_rad,
+        side,
+        ):
+    """
+    Calculate the normal points between a circle and a kidney shape.
+    Takes a line between the origin (which is the centre of the kidney's major
+    arcs) and the centre of the circle. Where this lines intercepts the kidney
+    edge and circular edge are the normal points.
+    """
+    pass
+
+
+def kidney_and_circle_wires2(
+        top_rad,
+        top_pos,
+        bot_inner_rad,
+        bot_outer_rad,
+        ):
+    # calculate tangential points
+    circle_tangent_coords_0, kidney_tangent_coords_0 = tangential_points(
+            top_rad,
+            top_pos,
+            port_rad,
+            port_pos,
+            "+X")
+    circle_tangent_point_0 = Point(
+            *circle_tangent_coords_0,
+            z=top_pos[2],
+            control_point=True
+            )
+    kidney_tangent_point_0 = Point(
+            *kidney_tangent_coords_0,
+            z=0,
+            control_point=True
+            )
+    circle_tangent_point_0.match = kidney_tangent_point_0
+    kidney_tangent_point_0.match = circle_tangent_point_0
+    circle_tangent_coords_1, kidney_tangent_coords_1 = tangential_points(
+            top_rad,
+            top_pos,
+            port_rad,
+            port_pos,
+            "-Y")
+    circle_tangent_point_1 = Point(
+            *circle_tangent_coords_1,
+            z=top_pos[2],
+            control_point=True
+            )
+    kidney_tangent_point_1 = Point(
+            *kidney_tangent_coords_1,
+            z=0,
+            control_point=True
+            )
+    circle_tangent_point_1.match = kidney_tangent_point_1
+    kidney_tangent_point_1.match = circle_tangent_point_1
+
+    # calculate control points
+    circle_normal_coords_inner, kidney_normal_coords_inner = normal_points(
+            top_rad,
+            top_pos,
+            port_rad,
+            port_pos,
+            "+Y")
+    circle_normal_point_inner = Point(
+            *circle_normal_coords_inner,
+            z=top_pos[2],
+            control_point=True
+            )
+    kidney_normal_point_inner = Point(
+            *kidney_normal_coords_inner,
+            z=0,
+            control_point=True
+            )
+    circle_normal_point_inner.match = kidney_normal_point_inner
+    kidney_normal_point_inner.match = circle_normal_point_inner
+    circle_normal_coords_outer, kidney_normal_coords_outer = normal_points(
+            top_rad,
+            top_pos,
+            port_rad,
+            port_pos,
+            "-Y")
+    circle_normal_point_outer = Point(
+            *circle_normal_coords_outer,
+            z=top_pos[2],
+            control_point=True
+            )
+    kidney_normal_point_outer = Point(
+            *kidney_normal_coords_outer,
+            z=0,
+            control_point=True
+            )
+    circle_normal_point_outer.match = kidney_normal_point_outer
+    kidney_normal_point_outer.match = circle_normal_point_outer
+    
+    # create kidney shape arcs
+    kidney_loop = Loop()
+    port_rad = (bot_outer_rad - bot_inner_rad) / 2
+    k_arc_0 = Arc(
+            startpoint=kidney_normal_point_inner,
+            endpoint=Point(x=bot_inner_rad, y=0),
+            radius=-bot_inner_rad,
+            )
+    kidney_loop.arcs.append(k_arc_0)
+    k_arc_1 = Arc(
+            startpoint=k_arc_0.endpoint,
+            endpoint=Point(x=bot_outer_rad, y=0),
+            radius=port_rad
+            )
+    kidney_loop.arcs.append(k_arc_1)
+    k_arc_2 = Arc(
+            startpoint=k_arc_1.endpoint,
+            endpoint=Point(x=0, y=-bot_outer_rad),
+            radius=bot_outer_rad
+            )
+    kidney_loop.arcs.append(k_arc_2)
+    if kidney_tangent_point_0.y > k_arc_1.endpoint.y:
+        k_arc_1.intermediate_points.append(kidney_tangent_point_0)
+    else:
+        k_arc_2.intermediate_points.append(kidney_tangent_point_0)
+    k_arc_3 = Arc(
+            startpoint=k_arc_2.endpoint,
+            endpoint=Point(x=bot_inner_rad, y=0),
+            radius=port_rad
+            )
+    kidney_loop.arcs.append(k_arc_3)
+    if kidney_tangent_point_1.x < k_arc_2.endpoint.x:
+        k_arc_2.intermediate_points.append(kidney_tangent_point_1)
+    else:
+        k_arc_3.intermediate_points.append(kidney_tangent_point_1)
+    k_arc_4 = Arc(
+            startpoint=k_arc_3.endpoint,
+            endpoint=k_arc_0.startpoint,
+            radius=bot_inner_rad,
+            )
+    kidney_loop.arcs.append(k_arc_4)
+
+    # map points onto circular arc
+    circle = Loop()
+
+
+
 
 def get_angle(centre, point):
     x = point[0] - centre[0]
