@@ -222,18 +222,27 @@ class UpperWire:
         edges = []
         points = self.points()
         points.append(points[0])
-        for start, end in zip(points[:-1], points[1:]):
-            print(f"creating an edge starting at {math.atan2(start.y, start.x)} radians")
-            edges.append(Edge.makeCirclePnts(
-                radius=self.radius,
-                start=start,
-                end=end,
-                pnt=self.centre.wrapped,
-                # must be negative, see workings at the start of this file
-                dir=self.circle_dir,
-                sense=self.sense,
-            ))
-        out = cq.Wire.assembleEdges(edges)
+        # for start, end in zip(points[:-1], points[1:]):
+        #     print(f"creating an edge starting at {math.atan2(start.y, start.x)} radians")
+        #     edges.append(Edge.makeCirclePnts(
+        #         radius=self.radius,
+        #         start=start,
+        #         end=end,
+        #         pnt=self.centre.wrapped,
+        #         # must be negative, see workings at the start of this file
+        #         dir=self.circle_dir,
+        #         sense=self.sense,
+        #     ))
+        # out = cq.Wire.assembleEdges(edges)
+        out = (
+            cq
+            .Workplane('XY', origin=self.centre)
+            .moveTo(points[0].x, points[0].y)
+        )
+        for point in points[1:]:
+            print(f"moving to {point - self.centre}")
+            out = out.radiusArc((point.x, point.y), -self.radius)
+        out = out.wire().val()
         return out
 
     def edge_idx(self, idx: int):
@@ -270,6 +279,7 @@ class UpperWire:
         """
         self.check_radius(point)
         self.fixed_points[idx] = point
+        print(f"adding a fixed point at {point - self.centre}")
 
     def check_radius(self, point):
         """
@@ -342,6 +352,10 @@ def tangential_points(
     Calculate the tangential points between two circles with radius and
     position described by the arguments. This generates several options, pick
     the points according to side.
+    For some fucking reason I can't get the correct points out of this method.
+    TODO Consider rewriting to use:
+        http://jwilson.coe.uga.edu/EMAT6680Su06/Byrd/Assignment
+        Six/RBAssignmentSix.html
     """
     if not isinstance(top_pos, Vector):
         top_pos = Vector(top_pos)
@@ -368,8 +382,8 @@ def tangential_points(
     for name, sign in zip(["pos", "neg"], [1, -1]):
         alpha = gamma + sign * beta
         results[name] = {
-            "x3": x1 + sign * r1 * math.sin(alpha),
-            "y3": y1 + sign * r1 * math.cos(alpha),
+            "x3": x1 - sign * r1 * math.sin(alpha),
+            "y3": y1 - sign * r1 * math.cos(alpha),
             "x4": x2 + sign * r2 * math.sin(alpha),
             "y4": y2 + sign * r2 * math.cos(alpha),
         }
@@ -818,7 +832,8 @@ top_wire = (
 top_face = cq.Face.makeFromWires(top_wire)
 
 shell = cq.Shell.makeShell([bottom_face, vert_face, top_face])
-vacuum_path = cq.Workplane(cq.Solid.makeSolid(shell))
+# solid = cq.Solid.makeSolid(shell)
+# vacuum_path = cq.Workplane(solid)
 show_object(vert_face, "face")
 for idx, edge in enumerate(hose_wire.Edges()):
     show_object(edge, str(idx))
