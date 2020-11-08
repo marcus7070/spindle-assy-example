@@ -50,36 +50,61 @@ class Vector(cq.Vector):
 class Edge(cq.Edge):
 
     @classmethod
-    def makeCircle(
+    def makeCirclePnts(
         cls,
         radius: float,
+        start: Vector,
+        end: Vector,
         pnt=Vector(0, 0, 0),
         dir=Vector(0, 0, 1),
-        angle1: float = 360.0,
-        angle2: float = 360,
         sense: bool = True,
     ) -> "Edge":
-        pnt = Vector(pnt)
-        dir = Vector(dir)
+        """
+        https://old.opencascade.com/doc/occt-7.4.0/refman/html/class_g_c___make_arc_of_circle.html#aea65b3bf21168147e6547fb725ffbf5f
+        """
+
+        def rotation_direction(trimmed_circ, direction=Vector(0, 0, 1)):
+            """
+            returns true if the trimmed circle (arc) is in the anti-clockwise
+            direction around argument direction
+            """
+            start = Vector(trimmed_circ.StartPoint())
+            end = Vector(trimmed_circ.EndPoint())
+            product = start.cross(end)
+            projection = direction.normalized().dot(product)
+            print(f"this curve has a projection of {projection}")
+            return (projection >= 0)
+
+        if not isinstance(pnt, cq.Vector):
+            pnt = Vector(pnt)
+        if not isinstance(dir, cq.Vector):
+            dir = Vector(dir)
+        axis = cq.occ_impl.shapes.gp_Ax2(
+            pnt.toPnt(),
+            dir.toDir(),
+            (start - pnt).toDir(),
+        )
         circle_gp = cq.occ_impl.shapes.gp_Circ(
-            cq.occ_impl.shapes.gp_Ax2(pnt.toPnt(), dir.toDir()),
+            axis,
             radius
         )
 
-        if angle1 == angle2:  # full circle case
-            return cls(
-                cq.occ_impl.shapes.BRepBuilderAPI_MakeEdge(circle_gp).Edge()
-            )
-        else:  # arc case
-            circle_geom = cq.occ_impl.shapes.GC_MakeArcOfCircle(
-                circle_gp,
-                angle1 * cq.occ_impl.shapes.DEG2RAD,
-                angle2 * cq.occ_impl.shapes.DEG2RAD,
-                sense
-            ).Value()
-            return cls(
-                cq.occ_impl.shapes.BRepBuilderAPI_MakeEdge(circle_geom).Edge()
-            )
+        circle_geom = cq.occ_impl.shapes.GC_MakeArcOfCircle(
+            circle_gp,
+            start.toPnt(),
+            end.toPnt(),
+            sense
+        ).Value()
+
+        # need to make some checks here to see if the trimmed curve needs to be
+        # reversed or not
+
+        # if not rotation_direction(circle_geom, Vector(0, 0, -1)):
+        #     circle_geom = circle_geom.Reversed()
+
+        return cls(
+            cq.occ_impl.shapes.BRepBuilderAPI_MakeEdge(circle_geom).Edge()
+        )
 
 
 class Arc(Edge):
@@ -177,8 +202,8 @@ class UpperWire:
     Builds a wire to represent the upper circular edge of the ruled surface.
     """
 
-    zero_vector = Vector(1, 0, 0)
-    negative_dir_vector = Vector(0, -1, 0)
+    circle_dir = Vector(0, 0, 1)
+    sense = True
 
     def __init__(self, centre, radius):
         if not isinstance(centre, Vector):
@@ -196,32 +221,35 @@ class UpperWire:
         """
         edges = []
         points = self.points()
-        print(f"length of self.points is {len(points)}")
-        # points = [points[-1]] + points
         points.append(points[0])
-        for a1, a2 in zip(points[:-1], points[1:]):
-            print(f"creating an edge between {a1} and {a2}")
-            edges.append(Edge.makeCircle(
+        for start, end in zip(points[:-1], points[1:]):
+            print(f"creating an edge starting at {math.atan2(start.y, start.x)} radians")
+            edges.append(Edge.makeCirclePnts(
                 radius=self.radius,
+                start=start,
+                end=end,
                 pnt=self.centre.wrapped,
                 # must be negative, see workings at the start of this file
-                dir=Vector(0, 0, -1),
-                angle1=a1,
-                angle2=a2,
-                sense=False,
+                dir=self.circle_dir,
+                sense=self.sense,
             ))
-            print(
-                "I intended for an edge to start at "
-                + f"{a1}, and it actually started at "
-                + f"{self.convert_to_angle(edges[-1].startPoint())}"
-            )
-            print(
-                "I intended for an edge to end at "
-                + f"{a2}, and it actually ended at "
-                + f"{self.convert_to_angle(edges[-1].endPoint())}"
-            )
         out = cq.Wire.assembleEdges(edges)
         return out
+
+    def edge_idx(self, idx: int):
+        """
+        Generates one of the four fixed wires, not including intermediate
+        points.
+        idx is an integer between 0 and 3 inclusive.
+        """
+        return Edge.makeCirclePnts(
+            radius=self.radius,
+            start=self.fixed_points[idx],
+            end=self.fixed_points[(idx + 1) % 4],
+            pnt=self.centre,
+            dir=self.circle_dir,
+            sense=self.sense,
+        )
 
     def points(self):
         """
@@ -240,18 +268,12 @@ class UpperWire:
         """
         Adds one of the 4 fixed points.
         """
-        angle = self.convert_to_angle(point)
-        print(f"adding a fixed point at {angle}")
-        self.fixed_points[idx] = angle
+        self.check_radius(point)
+        self.fixed_points[idx] = point
 
-    def convert_to_angle(self, point):
+    def check_radius(self, point):
         """
-        Converts a point to an angle as used in the points list. Needs to be in
-        degrees, as used by the wire method.
-        I thought this would give negative angles orginally, but they are
-        always positive. Hence the hacky shit with negative_dir_vector.
-        TODO: This still isn't quite right. I think I need two equations with
-        orthogonal vectors to get the actual angle.
+        Check that point has the correct radius
         """
         vector_centre_to_point = point - self.centre
         if abs(vector_centre_to_point.Length - self.radius) > 1e-4 * self.radius:
@@ -260,25 +282,15 @@ class UpperWire:
                 f"is too far from centre {self.centre} " +
                 f"to have radius {self.radius}"
             )
-        # angle = self.zero_vector.getAngle(vector_centre_to_point)
-        angle = math.atan2(vector_centre_to_point.y, vector_centre_to_point.x)
-        return angle / cq.occ_impl.shapes.DEG2RAD
 
     def add_intermediate_point(self, idx, proportion):
         """
         Adds a point to wire idx at proportion.
         """
-        print(f"got proportion {proportion} for edge {idx}")
         self.check_fixed_points()
-        wire_start = self.fixed_points[idx]
-        wire_end = self.fixed_points[(idx + 1) % 4]
-        new_point = wire_start + proportion * (wire_end % 360 - wire_start % 360)
-        # need to make (wire_end - wire_start) always be negative, since the
-        # wire is always heading clockwise
-        print(f"start: {wire_start}, intermediate point: {new_point}, end: {wire_end}")
-        # print(f"adding an intermediate point at {new_point}")
+        edge = self.edge_idx(idx)
+        new_point = edge.positionAt(proportion)
         self.intermediate_points[idx].append(new_point)
-        self.intermediate_points[idx].sort()
 
     def check_fixed_points(self):
         if not all(self.fixed_points):
