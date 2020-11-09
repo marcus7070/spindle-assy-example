@@ -896,7 +896,7 @@ part = (
 # y centre of the circle
 yc = -inner_port_major_rad - dims.vac.port.rad
 # radius of outer edge
-# r_outer = dims.vac.port.rad + dims.vac.wall_thick + dims.vac.brush.slot_width + dims.vac.wall_thick
+r_outer_initial = dims.vac.port.rad + dims.vac.wall_thick + dims.vac.brush.slot_width + dims.vac.wall_thick
 r_outer = dims.vac.port.rad + vac_port_to_body_outer
 # to get to that radius, the line must extend horizontally until
 x_start = math.sqrt(r_outer ** 2 - (dims.vac.port.rad + dims.vac.wall_thick) ** 2)
@@ -906,11 +906,16 @@ rk_outer = rk_inner + dims.vac.port.rad + r_outer
 part = (
     part
     .spline(
-        [(-r_outer, yc)]
+        [(-r_outer_initial - 5, yc)]
         , tangents=[(-1, 0), (0, -1)]
         , includeCurrent=True
     )
-    .radiusArc((0, -body_major_radius), -r_outer)
+    # .radiusArc((0, -body_major_radius), -r_outer)
+    .spline(
+        [(0, -body_major_radius)],
+        tangents=[(0, -1), (1, 0)],
+        includeCurrent=True,
+    )
     .radiusArc((body_major_radius, 0), -body_major_radius)
     .spline(
         [(dims.vac.mount_face.x_max, dims.vac.mount_face.y)]
@@ -1013,13 +1018,23 @@ brush_slot_path = (
         includeCurrent=True,
     )
     .tangentArcPoint((0, -brush_slot_major_radius), relative=False)
-    .tangentArcPoint((-r_brush_to_port, r_brush_to_port), relative=True)
+    # .tangentArcPoint((-r_brush_to_port, r_brush_to_port), relative=True)
+    .spline(
+        [(-r_brush_to_port, yc + 5)],
+        tangents=[(-1, 0), (0, 1)],
+        includeCurrent=True
+    )
 )
 brush_slot = (
     cq
     .Workplane('XZ', origin=brush_slot_path.val().endPoint())
     .center(0, dims.vac.brush.slot_depth / 2)
-    .rect(dims.vac.brush.slot_width, dims.vac.brush.slot_depth, centered=True)
+    # .rect(dims.vac.brush.slot_width, dims.vac.brush.slot_depth, centered=True)
+    .moveTo(-dims.vac.brush.slot_width / 2, -dims.vac.brush.slot_depth / 2)
+    .hLine(dims.vac.brush.slot_width)
+    .vLine(dims.vac.brush.slot_depth - dims.vac.brush.slot_width)
+    .tangentArcPoint((-dims.vac.brush.slot_width, 0), relative=True)
+    .close()
     .sweep(brush_slot_path)
 )
 
