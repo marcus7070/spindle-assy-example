@@ -72,7 +72,7 @@ class Edge(cq.Edge):
             end = Vector(trimmed_circ.EndPoint())
             product = start.cross(end)
             projection = direction.normalized().dot(product)
-            print(f"this curve has a projection of {projection}")
+            # print(f"this curve has a projection of {projection}")
             return (projection >= 0)
 
         if not isinstance(pnt, cq.Vector):
@@ -210,10 +210,15 @@ class UpperWire:
             centre = Vector(centre)
         self.centre = centre
         self.radius = radius
+        # the signed value used for Workplane.radiusArc
+        self.radiusArc_radius = radius
         self.fixed_points = [None] * 4
         self.intermediate_points = []
         for idx in range(4):
             self.intermediate_points.append([])
+
+    def calc_radius(self, point):
+        return (point - self.centre).Length
 
     def wire(self):
         """
@@ -236,12 +241,13 @@ class UpperWire:
         # out = cq.Wire.assembleEdges(edges)
         out = (
             cq
-            .Workplane('XY', origin=self.centre)
+            .Workplane('XY', origin=Vector(0, 0, self.centre.z))
             .moveTo(points[0].x, points[0].y)
         )
         for point in points[1:]:
-            print(f"moving to {point - self.centre}")
-            out = out.radiusArc((point.x, point.y), -self.radius)
+            # print(f"moving to {point - self.centre}")
+            # print(f"this point has radius {self.calc_radius(point)}")
+            out = out.radiusArc((point.x, point.y), self.radiusArc_radius)
         out = out.wire().val()
         return out
 
@@ -251,14 +257,26 @@ class UpperWire:
         points.
         idx is an integer between 0 and 3 inclusive.
         """
-        return Edge.makeCirclePnts(
-            radius=self.radius,
-            start=self.fixed_points[idx],
-            end=self.fixed_points[(idx + 1) % 4],
-            pnt=self.centre,
-            dir=self.circle_dir,
-            sense=self.sense,
+        # return Edge.makeCirclePnts(
+        #     radius=self.radius,
+        #     start=self.fixed_points[idx],
+        #     end=self.fixed_points[(idx + 1) % 4],
+        #     pnt=self.centre,
+        #     dir=self.circle_dir,
+        #     sense=self.sense,
+        # )
+        start = self.fixed_points[idx]
+        end = self.fixed_points[(idx + 1) % 4]
+        out = (
+            cq
+            .Workplane('XY', origin=Vector(0, 0, self.centre.z))
+            .moveTo(start.x, start.y)
+            .radiusArc((end.x, end.y), self.radiusArc_radius)
+            .val()
         )
+        assert abs((out.startPoint() - self.fixed_points[idx]).Length) < 1e-4
+        assert abs((out.endPoint() - self.fixed_points[(idx + 1) % 4]).Length) < 1e-4
+        return out
 
     def points(self):
         """
@@ -269,7 +287,7 @@ class UpperWire:
         for idx in range(4):
             out.append(self.fixed_points[idx])
             if self.intermediate_points[idx]:
-                print(f"extending by {self.intermediate_points[idx]}")
+                # print(f"extending by {self.intermediate_points[idx]}")
                 out.extend(self.intermediate_points[idx])
         return out
 
@@ -277,9 +295,13 @@ class UpperWire:
         """
         Adds one of the 4 fixed points.
         """
+        # this point should be on the same z plane as centre
+        if abs(point.z - self.centre.z) > 1e-4:
+            point = Vector(point.x, point.y, self.centre.z)
         self.check_radius(point)
         self.fixed_points[idx] = point
-        print(f"adding a fixed point at {point - self.centre}")
+        # print(f"adding a fixed point at {point - self.centre} relative to self.centre")
+        # print(f"this point has radius {self.calc_radius(point)}")
 
     def check_radius(self, point):
         """
@@ -300,6 +322,8 @@ class UpperWire:
         self.check_fixed_points()
         edge = self.edge_idx(idx)
         new_point = edge.positionAt(proportion)
+        # print(f"trying to add intermediate point {new_point}")
+        # print(f"which has radius {self.calc_radius(new_point)}")
         self.intermediate_points[idx].append(new_point)
 
     def check_fixed_points(self):
@@ -380,10 +404,10 @@ def tangential_points(
     #         "y4": y2 + r2 * math.cos(alpha),
     #     }
     for name, sign in zip(["pos", "neg"], [1, -1]):
-        alpha = gamma + sign * beta
+        alpha = gamma - sign * beta
         results[name] = {
-            "x3": x1 - sign * r1 * math.sin(alpha),
-            "y3": y1 - sign * r1 * math.cos(alpha),
+            "x3": x1 + sign * r1 * math.sin(alpha),
+            "y3": y1 + sign * r1 * math.cos(alpha),
             "x4": x2 + sign * r2 * math.sin(alpha),
             "y4": y2 + sign * r2 * math.cos(alpha),
         }
@@ -822,116 +846,134 @@ print(f"kidney edges: {len(kidney_wire.Edges())}, circle edges: {len(hose_wire.E
 vert_face = cq.Face.makeRuledSurface(kidney_wire, hose_wire)
 
 bottom_face = cq.Face.makeFromWires(kidney_wire)
-top_wire = (
-    cq
-    .Workplane('XY', origin=dims.vac.hose.plane.origin)
-    .circle(dims.vac.hose.id / 2)
-    .wire()
-    .val()
-)
-top_face = cq.Face.makeFromWires(top_wire)
+# top_wire = (
+#     cq
+#     .Workplane('XY', origin=dims.vac.hose.plane.origin)
+#     .circle(dims.vac.hose.id / 2)
+#     .wire()
+#     .val()
+# )
+# top_face = cq.Face.makeFromWires(top_wire)
+rev_hose_wire = cq.Edge(hose_wire.wrapped.Reversed())
+top_face = cq.Face.makeFromWires(rev_hose_wire)
 
 shell = cq.Shell.makeShell([bottom_face, vert_face, top_face])
-# solid = cq.Solid.makeSolid(shell)
-# vacuum_path = cq.Workplane(solid)
-show_object(vert_face, "face")
-for idx, edge in enumerate(hose_wire.Edges()):
-    show_object(edge, str(idx))
-# TODO check that each edge starts and ends where I expect it to, using
-# show_object. I think I've got the points right, but it looks like the surface
-# is going backwards around the circle
-
-# part = (
+# show_object(bottom_face, "bottom_face")
+# show_object(top_face, "top_face")
+# show_object(vert_face, "face")
+# print(type(shell.wrapped))
+solid = cq.Solid.makeSolid(shell)
+# show_object(solid)
+# alright, this gives nonsense errors (not a TopoDS object when it is), try another method
+# t0 = (
 #     cq
 #     .Workplane()
-#     .moveTo(dims.vac.mount_face.x_max, dims.vac.mount_face.y)
-#     .hLineTo(dims.vac.mount_face.x_min)
-#     .vLineTo(dims.vac.inner_rad)
-#     .hLineTo(0)
-#     .tangentArcPoint((0, -dims.vac.inner_rad * 2), relative=True)
-#     # now I need a tangentArcPoint out to the outer edge, which takes into account the slot for the brush.
+#     .add(kidney_wire)
+#     .toPending()
+#     .add(hose_wire)
+#     .toPending()
+#     .loft()
 # )
-# # y centre of the circle
-# yc = -inner_port_major_rad - dims.vac.port.rad
-# # radius of outer edge
-# # r_outer = dims.vac.port.rad + dims.vac.wall_thick + dims.vac.brush.slot_width + dims.vac.wall_thick
-# r_outer = dims.vac.port.rad + vac_port_to_body_outer
-# # to get to that radius, the line must extend horizontally until
-# x_start = math.sqrt(r_outer ** 2 - (dims.vac.port.rad + dims.vac.wall_thick) ** 2)
-# # inner radius of the kidney shape
-# rk_inner = abs(yc) - dims.vac.port.rad - dims.vac.wall_thick
-# # rk_outer = rk_inner + dims.vac.port.rad + r_outer
-# part = (
-#     part
-#     .spline(
-#         [(-r_outer, yc)]
-#         , tangents=[(-1, 0), (0, -1)]
-#         , includeCurrent=True
-#     )
-#     .radiusArc((0, -body_major_radius), -r_outer)
-#     .radiusArc((body_major_radius, 0), -body_major_radius)
-#     .spline(
-#         [(dims.vac.mount_face.x_max, dims.vac.mount_face.y)]
-#         , tangents=[(0, 1), (-1, 0)]
-#         , includeCurrent=True
-#     )
-#     .close()
-#     .extrude(dims.vac.z)
-#     .tag('base')
-#     .faces(">Y")
-#     .workplane(centerOption='ProjectedOrigin', origin=(0, 0, dims.vac.z / 2))
-#     .pushPoints([(-pos, 0) for pos in dims.vac_brack.holes])
-#     .circle(dims.vac_brack.hole.cbore_diam / 2 - 0.1)
-#     .extrude(dims.vac_brack.hole.cbore_depth - 2, taper=10)
-#     .faces(">Z", tag='base')
-#     .workplane(centerOption='ProjectedOrigin', origin=(0, 0, 0))
-#     .hole(dims.spindle.bearing_cap.diam + 2, dims.spindle.bearing_cap.height + 2)
+# show_object(t0)
+# OK, that method is a segfault, try yet another.
+vacuum_path = cq.Workplane(solid)
+# # for idx, edge in enumerate(hose_wire.Edges()):
+# #     show_object(edge, str(idx))
+# # TODO check that each edge starts and ends where I expect it to, using
+# # show_object. I think I've got the points right, but it looks like the surface
+# # is going backwards around the circle
+
+part = (
+    cq
+    .Workplane()
+    .moveTo(dims.vac.mount_face.x_max, dims.vac.mount_face.y)
+    .hLineTo(dims.vac.mount_face.x_min)
+    .vLineTo(dims.vac.inner_rad)
+    .hLineTo(0)
+    .tangentArcPoint((0, -dims.vac.inner_rad * 2), relative=True)
+    # now I need a tangentArcPoint out to the outer edge, which takes into account the slot for the brush.
+)
+# y centre of the circle
+yc = -inner_port_major_rad - dims.vac.port.rad
+# radius of outer edge
+# r_outer = dims.vac.port.rad + dims.vac.wall_thick + dims.vac.brush.slot_width + dims.vac.wall_thick
+r_outer = dims.vac.port.rad + vac_port_to_body_outer
+# to get to that radius, the line must extend horizontally until
+x_start = math.sqrt(r_outer ** 2 - (dims.vac.port.rad + dims.vac.wall_thick) ** 2)
+# inner radius of the kidney shape
+rk_inner = abs(yc) - dims.vac.port.rad - dims.vac.wall_thick
+rk_outer = rk_inner + dims.vac.port.rad + r_outer
+part = (
+    part
+    .spline(
+        [(-r_outer, yc)]
+        , tangents=[(-1, 0), (0, -1)]
+        , includeCurrent=True
+    )
+    .radiusArc((0, -body_major_radius), -r_outer)
+    .radiusArc((body_major_radius, 0), -body_major_radius)
+    .spline(
+        [(dims.vac.mount_face.x_max, dims.vac.mount_face.y)]
+        , tangents=[(0, 1), (-1, 0)]
+        , includeCurrent=True
+    )
+    .close()
+    .extrude(dims.vac.z)
+    .tag('base')
+    .faces(">Y")
+    .workplane(centerOption='ProjectedOrigin', origin=(0, 0, dims.vac.z / 2))
+    .pushPoints([(-pos, 0) for pos in dims.vac_brack.holes])
+    .circle(dims.vac_brack.hole.cbore_diam / 2 - 0.1)
+    .extrude(dims.vac_brack.hole.cbore_depth - 2, taper=10)
+    .faces(">Z", tag='base')
+    .workplane(centerOption='ProjectedOrigin', origin=(0, 0, 0))
+    .hole(dims.spindle.bearing_cap.diam + 2, dims.spindle.bearing_cap.height + 2)
+)
+cutters = []
+for pos in dims.magnet.positions:
+    selector = ">Z" if pos[1] >= 0 else "<Z"
+    inverse_selector = "<Z" if pos[1] >= 0 else ">Z"
+    cut_depth = dims.vac.z / 2 - max([y for _, y in dims.magnet.positions])
+    temp = (
+        part
+        .faces(selector, tag='base')
+        .workplane(centerOption='ProjectedOrigin', origin=(0, dims.vac.mount_face.y - dims.magnet.wall_thick - dims.magnet.slot.thick / 2, 0))
+        .move(pos[0], 0)
+        .rect(dims.magnet.slot.width, dims.magnet.slot.thick, centered=True)
+        .extrude(-cut_depth, combine=False)
+        .faces(inverse_selector)
+        .workplane()
+        .center(0, -dims.magnet.slot.thick / 2)
+        .rect(dims.magnet.slot.width / 2, dims.magnet.slot.thick, centered=False)
+        .revolve(axisEnd=(0, 1))
+    )
+    cutters.append(temp)
+    del temp
+for cutter in cutters:
+    part = part.cut(cutter)
+    del cutter
+
+# # This has to become a long pipe with a ring on the end to sit in the upper vac
+# # mount
+# chimney = (
+#     cq
+#     .Workplane('XY', origin=dims.vac.hose.plane.origin)
+#     .circle(dims.vac.chimney.main_od / 2)
+#     .extrude(dims.vac.chimney.height)
+#     .faces('>Z')
+#     .workplane()
+#     .hole(dims.vac.hose.id, dims.vac.chimney.height)
 # )
-# cutters = []
-# for pos in dims.magnet.positions:
-#     selector = ">Z" if pos[1] >= 0 else "<Z"
-#     inverse_selector = "<Z" if pos[1] >= 0 else ">Z"
-#     cut_depth = dims.vac.z / 2 - max([y for _, y in dims.magnet.positions])
-#     temp = (
-#         part
-#         .faces(selector, tag='base')
-#         .workplane(centerOption='ProjectedOrigin', origin=(0, dims.vac.mount_face.y - dims.magnet.wall_thick - dims.magnet.slot.thick / 2, 0))
-#         .move(pos[0], 0)
-#         .rect(dims.magnet.slot.width, dims.magnet.slot.thick, centered=True)
-#         .extrude(-cut_depth, combine=False)
-#         .faces(inverse_selector)
-#         .workplane()
-#         .center(0, -dims.magnet.slot.thick / 2)
-#         .rect(dims.magnet.slot.width / 2, dims.magnet.slot.thick, centered=False)
-#         .revolve(axisEnd=(0, 1))
-#     )
-#     cutters.append(temp)
-#     del temp
-# for cutter in cutters:
-#     part = part.cut(cutter)
-#     del cutter
-# 
-# # # This has to become a long pipe with a ring on the end to sit in the upper vac
-# # # mount
-# # chimney = (
-# #     cq
-# #     .Workplane('XY', origin=dims.vac.hose.plane.origin)
-# #     .circle(dims.vac.chimney.main_od / 2)
-# #     .extrude(dims.vac.chimney.height)
-# #     .faces('>Z')
-# #     .workplane()
-# #     .hole(dims.vac.hose.id, dims.vac.chimney.height)
-# # )
-# 
-# kidney_wire, hose_wire = kidney_and_circle_wires2(
-#     dims.vac.chimney.main_od / 2 + dims.vac.wall_thick,
-#     dims.vac.hose.plane.origin,
-#     rk_inner,
-#     body_major_radius
-# )
-# vert_face = cq.Face.makeRuledSurface(kidney_wire, hose_wire)
-# 
-# bottom_face = cq.Face.makeFromWires(kidney_wire)
+
+kidney_wire, hose_wire = kidney_and_circle_wires2(
+    dims.vac.chimney.main_od / 2 + dims.vac.wall_thick,
+    dims.vac.hose.plane.origin,
+    rk_inner,
+    body_major_radius
+)
+vert_face = cq.Face.makeRuledSurface(kidney_wire, hose_wire)
+
+bottom_face = cq.Face.makeFromWires(kidney_wire)
 # top_wire = (
 #     cq
 #     .Workplane('XY', origin=dims.vac.hose.plane.origin)
@@ -940,44 +982,46 @@ for idx, edge in enumerate(hose_wire.Edges()):
 #     .val()
 # )
 # top_face = cq.Face.makeFromWires(top_wire)
-# shell = cq.Shell.makeShell([bottom_face, vert_face, top_face])
-# vacuum_port_walls = cq.Solid.makeSolid(shell)
-# upper_vac = (
-#     cq.Workplane('XY', origin=dims.vac.hose.plane.origin)
-#     .circle(dims.vac.chimney.main_od / 2 + dims.vac.wall_thick)
-#     .extrude(dims.vac.wall_thick)
-#     .tag('base')
-#     .faces('>Z')
-#     .workplane()
-#     .hole(dims.vac.chimney.main_od, dims.vac.wall_thick)
-#     .faces('>Z', tag='base')
-#     .workplane()
-#     .hole(dims.vac.hose.id)
-#     .union(vacuum_port_walls, clean=False, tol=0.1)
-# )
-# 
-# brush_offset = dims.vac.wall_thick + dims.vac.brush.slot_width / 2
-# r_brush_to_port = dims.vac.port.rad + brush_offset
-# brush_slot_path = (
-#     cq
-#     .Workplane()
-#     .moveTo(dims.vac.mount_face.x_min, r_brush_to_port)
-#     .hLineTo(abs(yc))
-#     .spline(
-#         [(brush_slot_major_radius, 0)],
-#         tangents=[(1, 0), (0, -1)],
-#         includeCurrent=True,
-#     )
-#     .tangentArcPoint((0, -brush_slot_major_radius), relative=False)
-#     .tangentArcPoint((-r_brush_to_port, r_brush_to_port), relative=True)
-# )
-# brush_slot = (
-#     cq
-#     .Workplane('XZ', origin=brush_slot_path.val().endPoint())
-#     .center(0, dims.vac.brush.slot_depth / 2)
-#     .rect(dims.vac.brush.slot_width, dims.vac.brush.slot_depth, centered=True)
-#     .sweep(brush_slot_path)
-# )
-# 
-# part = part.union(upper_vac).cut(vacuum_path).cut(brush_slot)
-# # del vacuum_path, upper_vac, # brush_slot_path, brush_slot
+reversed_hose_wire = Edge(hose_wire.wrapped.Reversed())
+top_face = cq.Face.makeFromWires(reversed_hose_wire)
+shell = cq.Shell.makeShell([bottom_face, vert_face, top_face])
+vacuum_port_walls = cq.Solid.makeSolid(shell)
+upper_vac = (
+    cq.Workplane('XY', origin=dims.vac.hose.plane.origin)
+    .circle(dims.vac.chimney.main_od / 2 + dims.vac.wall_thick)
+    .extrude(dims.vac.wall_thick)
+    .tag('base')
+    .faces('>Z')
+    .workplane()
+    .hole(dims.vac.chimney.main_od, dims.vac.wall_thick)
+    .faces('>Z', tag='base')
+    .workplane()
+    .hole(dims.vac.hose.id)
+    .union(vacuum_port_walls, clean=False, tol=0.1)
+)
+
+brush_offset = dims.vac.wall_thick + dims.vac.brush.slot_width / 2
+r_brush_to_port = dims.vac.port.rad + brush_offset
+brush_slot_path = (
+    cq
+    .Workplane()
+    .moveTo(dims.vac.mount_face.x_min, r_brush_to_port)
+    .hLineTo(abs(yc))
+    .spline(
+        [(brush_slot_major_radius, 0)],
+        tangents=[(1, 0), (0, -1)],
+        includeCurrent=True,
+    )
+    .tangentArcPoint((0, -brush_slot_major_radius), relative=False)
+    .tangentArcPoint((-r_brush_to_port, r_brush_to_port), relative=True)
+)
+brush_slot = (
+    cq
+    .Workplane('XZ', origin=brush_slot_path.val().endPoint())
+    .center(0, dims.vac.brush.slot_depth / 2)
+    .rect(dims.vac.brush.slot_width, dims.vac.brush.slot_depth, centered=True)
+    .sweep(brush_slot_path)
+)
+
+part = part.union(upper_vac).cut(vacuum_path).cut(brush_slot)
+# del vacuum_path, upper_vac, # brush_slot_path, brush_slot
