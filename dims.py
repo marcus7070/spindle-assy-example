@@ -73,14 +73,17 @@ vac_brack.hole.cbore_depth = vac_brack.y - vac_brack.wall_thick
 
 vac = d()
 vac.hose = d()
-vac.hose.od = 42
-vac.hose.id = 32.7
+# vac.hose.od = 42
+# vac.hose.id = 32.7
+vac.hose.od = 42 + 10
+vac.hose.id = 32.7 + 10
 vac.hose.socket = d()
 vac.hose.socket.od = vac.hose.od + 5 * 2
 vac.hose.insertion = vac.hose.od / 2
 vac.hose.tape_width = 50
 vac.hose.plane = d()
-radius = spindle.body.diam / 2 + vac.hose.socket.od / 2 + 10
+# radius = spindle.body.diam / 2 + vac.hose.socket.od / 2 + 10
+radius = spindle.body.diam / 2 + vac.hose.socket.od / 2
 angle = math.radians(-45)
 vac.hose.plane.origin = (
     math.cos(angle) * radius
@@ -97,13 +100,20 @@ vac.inner_rad = spindle.nut.diam / 2 + 4
 vac.z = vac_brack.z
 vac.wall_thick = 2
 vac.port = d()
-vac.port.rad = vac.hose.id / 2 * 1.2
+# vac.port.rad = vac.hose.id / 2 * 1.2
+vac.port.rad = vac.hose.id / 2
 vac.brush = d()
 vac.brush.slot_width = 5.5
 vac.brush.slot_depth = 10  # brush has 20mm canvas on top
 vac.chimney = d()
 vac.chimney.main_od = vac.hose.id + vac.wall_thick * 2
-vac.chimney.height = 100
+
+chimney = d()
+chimney.base = d()
+chimney.base.id = vac.hose.id
+chimney.base.step_diam = vac.chimney.main_od
+chimney.base.od = vac.chimney.main_od + 2 * vac.wall_thick
+chimney.base.step_z = vac.wall_thick
 
 
 magnet = d()
