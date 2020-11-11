@@ -108,14 +108,6 @@ vac.brush.slot_depth = 10  # brush has 20mm canvas on top
 vac.chimney = d()
 vac.chimney.main_od = vac.hose.id + vac.wall_thick * 2
 
-chimney = d()
-chimney.base = d()
-chimney.base.id = vac.hose.id
-chimney.base.step_diam = vac.chimney.main_od
-chimney.base.od = vac.chimney.main_od + 2 * vac.wall_thick
-chimney.base.step_z = vac.wall_thick
-
-
 magnet = d()
 magnet.diam = 3.9
 magnet.slot = d()
@@ -135,6 +127,52 @@ for y in [1, -1]:
             , y * (vac_brack.z / 2 - magnet.diam / 2 * 1.2)
         ))
 del centre, leftmost_offset
+
+chimney = d()
+chimney.base = d()
+chimney.base.id = vac.hose.id
+chimney.base.step_diam = vac.chimney.main_od
+chimney.base.od = vac.chimney.main_od + 2 * vac.wall_thick
+chimney.base.step_z = vac.wall_thick
+chimney.midprofile = d()
+chimney.midprofile.od = 42 + 5
+chimney.midprofile.id = 32.7 + 5
+chimney.midprofile.z = 20
+chimney.mountbase = d()
+chimney.mountbase.od = 42
+chimney.mountbase.id = 32.7
+chimney.mountbase.z = 100
+chimney.top = d()
+chimney.top.od = chimney.mountbase.od
+chimney.top.id = chimney.mountbase.id
+chimney.top.z = chimney.mountbase.z + 50
+chimney.mountface = d()
+chimney.mountface.origin = (
+    0,
+    chimney.top.od + vac.wall_thick,
+    (chimney.mountbase.z + chimney.top.z) / 2
+)
+chimney.mountface.align = d()
+chimney.mountface.align.hole = d()
+chimney.mountface.align.hole.diam = vac_brack.hole.cbore_diam
+chimney.mountface.align.stub = d()
+chimney.mountface.align.stub.length = 2
+chimney.mountface.align.stub.taper = 20
+chimney.mountface.align.stub.diam = chimney.mountface.align.hole.diam - 0.1
+chimney.mountface.width = vac.wall_thick * 3 + chimney.mountface.align.hole.diam * 2
+chimney.mountface.height = vac.wall_thick * 2 + chimney.mountface.align.hole.diam + 
+chimney.mountface.magnet = d()
+chimney.mountface.magnet.number = math.floor(chimney.mountface.width / magnet.seperation)
+centre = 0
+leftmost_offset = centre - (magnet.number - 1) * magnet.seperation / 2
+for y in [1, -1]:
+    for x in range(magnet.number):
+        magnet.positions.append((
+            leftmost_offset + x * magnet.seperation
+            , y * (chimney.mountface.height / 2 - magnet.diam / 2 * 1.2)
+        ))
+del centre, leftmost_offset
+
 
 assembly = d()
 assembly.bracket = d()
