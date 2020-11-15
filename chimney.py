@@ -73,34 +73,28 @@ chimney = (
     .move(0, dims.chimney.mountbase.od / 2)
     .circle(dims.chimney.mountbase.od / 2)
     .extrude(dims.chimney.top.z - dims.chimney.mountbase.z)
+    .tag('beforemountface')
 )
 
 # mounting face
 chimney = (
     chimney
     .copyWorkplane(
-        cq.Workplane('YZ', origin=(0, 0, dims.chimney.mountface.origin[2]))
+        cq.Workplane('YZ', origin=(0, dims.chimney.mountbase.od / 2, dims.chimney.mountface.origin[2]))
     )
+    .transformed(rotate=(0, -45, 0))
     .moveTo(dims.chimney.mountface.origin[1], dims.chimney.mountface.height / 2)
-    .hLineTo(dims.chimney.top.od / 2 + 15)  # adjust to get underside slope to the correct point
-    .vLine(dims.chimney.mountbase.z - dims.chimney.mountface.origin[2])
+    .hLineTo(0)
+    .vLine(-dims.chimney.mountface.height)
     .lineTo(dims.chimney.mountface.origin[1], -dims.chimney.mountface.height / 2)
     .close()
     .extrude(dims.chimney.mountface.width / 2, both=True)
     .tag('mountbase')
-    .faces(">Y")
-    .workplane()
-    # .pushPoints(
-    #     [(
-    #         sign * (dims.chimney.mountface.align.hole.diam + dims.vac.wall_thick / 2),
-    #         0
-    #     ) for sign in [-1, 1]]
-    # )
 )
 for sign in [-1, 1]:
     chimney = (
         chimney
-        .faces(">Y", tag="mountbase")
+        .faces(">(1, 1, 0)", tag="mountbase")
         .workplane()
         .moveTo(
             sign * (dims.chimney.mountface.align.hole.diam + dims.vac.wall_thick) / 2,
@@ -112,6 +106,44 @@ for sign in [-1, 1]:
             taper=dims.chimney.mountface.align.stub.taper
         )
     )
+
+# hose socket
+chimney = (
+    chimney
+    .faces('>Z', tag='beforemountface')
+    .workplane()
+    .circle(dims.chimney.top.od / 2)
+    .workplane(offset=dims.chimney.hose.socket.od - dims.chimney.top.od)
+    .circle(dims.chimney.hose.socket.od / 2)
+    .loft()
+    .faces(">Z")
+    .workplane()
+    .circle(dims.chimney.hose.socket.od / 2)
+    .extrude(dims.vac.wall_thick + dims.chimney.hose.insertion + dims.chimney.hose.tape_width)
+    .tag('top holes')
+    .faces(">Z")
+    .workplane()
+    .hole(
+        dims.chimney.hose.od,
+        depth=dims.chimney.hose.insertion + dims.chimney.hose.tape_width
+    )
+    # .faces(">Z", tag="top holes")
+    # .workplane()
+    # .hole(
+    #     dims.chimney.hose.id,
+    #     depth=dims.vac.wall_thick + dims.chimney.hose.insertion + dims.chimney.hose.tape_width
+    # )
+    .faces(">Z", tag="top holes")
+    .workplane()
+    .center(dims.chimney.hose.od / 2, 0)
+    .rect(10, dims.chimney.hose.socket.od * 2)
+    .cutBlind(-dims.chimney.hose.tape_width)
+    .faces(">Z", tag="top holes")
+    .workplane()
+    .center(-dims.chimney.hose.od / 2, 0)
+    .rect(10, dims.chimney.hose.socket.od * 2)
+    .cutBlind(-dims.chimney.hose.tape_width)
+)
 
 cutter = (
     chimney
@@ -126,6 +158,7 @@ cutter = (
 chimney = chimney.cut(cutter)
 del cutter
 
+chimney_top = chimney.findSolid().BoundingBox().zmax
 vac_path = (
     cq.Workplane()
     .copyWorkplane(chimney.workplaneFromTagged('2'))
@@ -142,7 +175,7 @@ vac_path = (
     .faces(">Z")
     .workplane()
     .circle(dims.chimney.top.id / 2)
-    .extrude(dims.chimney.top.z - dims.chimney.mountbase.z)
+    .extrude(chimney_top - dims.chimney.mountbase.z)
 )
 chimney = chimney.cut(vac_path)
 del vac_path
@@ -151,25 +184,32 @@ del vac_path
 cutters = []
 # TODO: bottom face can't be selected, so rewrite this to locate a large cutter
 # at magnet position
-for pos in dims.chimney.mountface.magnets.positions:
-    selector = ">Z" if pos[1] >= 0 else "<Z"
-    inverse_selector = "<Z" if pos[1] >= 0 else ">Z"
-    cut_depth = dims.vac.z / 2 - max([y for _, y in dims.magnet.positions])
-    temp = (
-        part
-        .faces(selector, tag='base')
-        .workplane(centerOption='ProjectedOrigin', origin=(0, dims.vac.mount_face.y - dims.magnet.wall_thick - dims.magnet.slot.thick / 2, 0))
-        .move(pos[0], 0)
-        .rect(dims.magnet.slot.width, dims.magnet.slot.thick, centered=True)
-        .extrude(-cut_depth, combine=False)
-        .faces(inverse_selector)
-        .workplane()
-        .center(0, -dims.magnet.slot.thick / 2)
-        .rect(dims.magnet.slot.width / 2, dims.magnet.slot.thick, centered=False)
-        .revolve(axisEnd=(0, 1))
+magnet_cutter = (
+    cq
+    .Workplane('XZ', origin=(0, 0, 0))
+    .moveTo(dims.magnet.slot.width / 2, dims.magnet.diam)
+    .vLineTo(0)
+    .tangentArcPoint((-dims.magnet.slot.width / 2, 0), relative=False)
+    .vLineTo(dims.magnet.diam)
+    .close()
+    .extrude(dims.magnet.slot.thick)
+)
+ys = [pos[1] for pos in dims.chimney.mountface.magnet.position]
+y_mid = (min(ys) + max(ys)) / 2
+faces =  chimney.faces(">(1, 1, 0)", tag="mountbase").vals()
+shell = cq.Shell.makeShell(faces)
+mount_origin = shell.Center()
+plane = chimney.faces(">(1, 1, 0)", tag="mountbase").workplane().plane
+for pos in dims.chimney.mountface.magnet.position:
+    angle = 180 if (pos[1] < y_mid) else 0
+    final_pos = plane.toWorldCoords((pos[0], pos[1], -dims.magnet.wall_thick))
+    cutters.append(
+        magnet_cutter
+        .rotate((0, 0, 0), (0, 0, 1), -45)
+        .rotate((0, 0, 0), (1, 1, 0), angle)
+        .translate(final_pos)
     )
-    cutters.append(temp)
-    del temp
+del magnet_cutter
 for cutter in cutters:
-    part = part.cut(cutter)
+    chimney = chimney.cut(cutter)
     del cutter
