@@ -194,3 +194,10 @@ assembly.vac_brack.offset = (0, 0, vac_brack.z / 2)
 assembly.vac_brack.z_min = assembly.vac_brack.offset[2] - vac_brack.z / 2
 assembly.vac = d()
 assembly.vac.offset = (assembly.spindle.offset[0], assembly.spindle.offset[1], assembly.vac_brack.z_min)
+
+brace = d()
+# brace.mount_face = (80.91753750528372, -80.18353583335627 - (0.4 + 9 * 0.3))
+brace.mount_face = (43.86821415031882, -77.1)
+# 1st profile, there is a loft between this profile and the mounting face
+brace.profile1 = (brace.mount_face[0] + 20, -bracket.thick, 10)
+brace.width = 80

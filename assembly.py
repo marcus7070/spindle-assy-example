@@ -1,4 +1,3 @@
-import cadquery as cq
 import vslot
 import clamp as clamp_module
 import bracket as bracket_module
@@ -6,6 +5,7 @@ import spindle as spindle_module
 import vac_brack as vac_brack_module
 import vac as vac_module
 import chimney as chimney_module
+import brace as brace_module
 import dims
 import importlib
 importlib.reload(dims)
@@ -15,7 +15,11 @@ importlib.reload(spindle_module)
 importlib.reload(vac_brack_module)
 importlib.reload(vac_module)
 importlib.reload(chimney_module)
+importlib.reload(brace_module)
 
+# Looks like I'm asking too much from the solver to assemble all these
+# components in a top level assembly. I should try breaking these parts into
+# subassemblies to simplify the process.
 assy = cq.Assembly()
 
 back = vslot.cslot(250)
@@ -77,16 +81,35 @@ assy.constrain(
     param=180,
 )
 
+brace = brace_module.brace
+assy.add(brace, name="brace", color=cq.Color(0.3, 0.2, 0.3, 0.8))
+assy.constrain(
+    "chimney",
+    chimney.faces(">(1, 1, 0)", tag="mountbase").val(),
+    "brace",
+    brace.faces("<Y", tag="mountbase").val(),
+    "Plane",
+)
+assy.constrain(
+    "brace@faces@>Z",
+    "bracket@faces@<Z",
+    "Axis",
+    # param=180
+)
+
 try:
     assy.solve()
 except Exception as e:
     print(e)
     raise e
+# # calculating the offset required for the brace's mounting face
+# unlocated_mount_face_centre = chimney.faces(">(1, 1, 0)", tag="mountbase").workplane().sphere(1, combine=False).val()
+# location = assy.objects["chimney"].loc
+# mount_face_centre = unlocated_mount_face_centre.move(location)
+# show_object(mount_face_centre)
+# mount_face_centre_vec = mount_face_centre.Center()
+# mount_face_centre_vec.z = 0
+# # to avoid a circular dependency, just copy and paste this into dims.py
+# print(f"brace mount face offset: {mount_face_centre_vec}")
+# # assert (cq.Vector(dims.brace.mount_face) - mount_face_centre).Length < 1e-4, "copy mount_face_centre to dims.py"
 show_object(assy)
-dir(assy)
-for name, child in assy.traverse():
-    print(f"name: {name}, obj: {child}")
-print(assy.objects["chimney"].loc)
-part_a = chimney.faces(">(1, 1, 0)", tag='mountbase').val().located(assy.objects["chimney"].loc)
-show_object(part_a)
-show_object(assy.objects["chimney"].obj)
