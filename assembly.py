@@ -9,6 +9,7 @@ import chimney as chimney_module
 import brace as brace_module
 import dims
 import importlib
+
 importlib.reload(dims)
 importlib.reload(clamp_module)
 importlib.reload(bracket_module)
@@ -29,12 +30,28 @@ assy.add(bracket_module.bracket, name="bracket", color=cq.Color(0.9, 0.9, 0.95))
 # Make the constraint between the centre of the bottom back edge of the bracket
 # and the centre of the bottom front edge of the back aluminium profile plus an
 # offset
-backpoint = back.faces("<Z", tag="unslotted").edges("<Y").translate((0, 0, dims.bottom_of_vslot_to_bottom_of_bracket)).val()
+backpoint = (
+    back.faces("<Z", tag="unslotted")
+    .edges("<Y")
+    .translate((0, 0, dims.bottom_of_vslot_to_bottom_of_bracket))
+    .val()
+)
 bracketpoint = bracket_module.bracket.faces("<Z").edges(">Y").val()
-# assy.constrain("bracket@faces@>Y", "back@faces@<Y", "Plane")
 assy.constrain("back", backpoint, "bracket", bracketpoint, "Point")
-assy.constrain("back", back.faces("<Y", tag="unslotted").val(), "bracket", bracket_module.bracket.faces(">Y").val(), "Axis")
-assy.constrain("back", back.faces("<Z", tag="unslotted").val(), "bracket", bracket_module.bracket.faces(">Z").val(), "Axis")
+assy.constrain(
+    "back",
+    back.faces("<Y", tag="unslotted").val(),
+    "bracket",
+    bracket_module.bracket.faces(">Y").val(),
+    "Axis",
+)
+assy.constrain(
+    "back",
+    back.faces("<Z", tag="unslotted").val(),
+    "bracket",
+    bracket_module.bracket.faces(">Z").val(),
+    "Axis",
+)
 
 clamp = clamp_module.clamp.rotate((0, 0, 0), (0, 0, 1), 180)
 assy.add(clamp, name="clamp")
@@ -43,9 +60,19 @@ assy.constrain("bracket@faces@<Z", "clamp@faces@>Z", "Axis")
 
 spindle = spindle_module.spindle
 assy.add(spindle, name="spindle", color=cq.Color(0.9, 0.7, 0.8))
-spindle_lower_face = spindle.faces(cq.NearestToPointSelector((0, 0, dims.spindle.body.length / 2))).edges("<Z").val()
+spindle_lower_face = (
+    spindle.faces(cq.NearestToPointSelector((0, 0, dims.spindle.body.length / 2)))
+    .edges("<Z")
+    .val()
+)
 clamp_lower_face = clamp.faces("<Z").edges("%CIRCLE").val()
-assy.constrain("clamp", clamp_lower_face, "spindle", spindle_lower_face.translate((0, 0, dims.spindle.body.clamp_end_offset)), "Plane")
+assy.constrain(
+    "clamp",
+    clamp_lower_face,
+    "spindle",
+    spindle_lower_face.translate((0, 0, dims.spindle.body.clamp_end_offset)),
+    "Plane",
+)
 
 vac_brack = vac_brack_module.bracket
 assy.add(vac_brack, name="vac_brack", color=cq.Color(0.2, 0.2, 0.2, 0.8))
@@ -53,15 +80,36 @@ backpoint2 = back.faces("<Z", tag="unslotted").edges("<Y").vertices(">X").val()
 vac_brack_point = vac_brack.faces("<Z").edges(">Y").vertices(">X").val()
 assy.constrain("back", backpoint2, "vac_brack", vac_brack_point, "Point")
 assy.constrain("back@faces@<Z", "vac_brack@faces@>Z", "Axis")
-assy.constrain("back", back.faces("<Y", tag="unslotted").val(), "vac_brack", vac_brack.faces(">Y").val(), "Axis")
+assy.constrain(
+    "back",
+    back.faces("<Y", tag="unslotted").val(),
+    "vac_brack",
+    vac_brack.faces(">Y").val(),
+    "Axis",
+)
 
 vac = vac_module.part
 assy.add(vac, name="vac", color=cq.Color(0.3, 0.2, 0.3, 0.8))
 vac_brack_front_bottom_left = vac_brack.faces("<Y").edges("<X").vertices("<Z").val()
 vac_back_bottom_left = vac.faces(">Y", tag="base").edges("<X").vertices("<Z").val()
-assy.constrain("vac_brack", vac_brack_front_bottom_left, "vac", vac_back_bottom_left, "Point")
-assy.constrain("vac_brack", vac_brack.faces("<Y").val(), "vac", vac.faces(">Y", tag="base").val(), "Axis")
-assy.constrain("vac_brack", vac_brack.faces("<Z").val(), "vac", vac.faces("<Z").val(), "Axis", param=0)
+assy.constrain(
+    "vac_brack", vac_brack_front_bottom_left, "vac", vac_back_bottom_left, "Point"
+)
+assy.constrain(
+    "vac_brack",
+    vac_brack.faces("<Y").val(),
+    "vac",
+    vac.faces(">Y", tag="base").val(),
+    "Axis",
+)
+assy.constrain(
+    "vac_brack",
+    vac_brack.faces("<Z").val(),
+    "vac",
+    vac.faces("<Z").val(),
+    "Axis",
+    param=0,
+)
 
 chimney = chimney_module.chimney
 assy.add(chimney, name="chimney", color=cq.Color(0.3, 0.2, 0.3, 0.8))
