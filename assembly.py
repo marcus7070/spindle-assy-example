@@ -1,3 +1,4 @@
+import cadquery as cq
 import vslot
 import clamp as clamp_module
 import bracket as bracket_module
