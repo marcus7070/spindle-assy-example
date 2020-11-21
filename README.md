@@ -16,10 +16,10 @@ I'm publishing this on GitHub because I feel there isn't enough examples of comp
 
 If you're lucky enough to use NixOS (and can use flakes, currently in the unstable branch but soon to be merged into the main branch), don't bother installing anything, just use this to run cq-editor:
 ```sh
-nix run github:marcus7070/cq-flake/11ef47f5aa465e0b1cf9bbc15999a5ed0b713ba9
+nix run github:marcus7070/cq-flake/8212e406fa63e4c166deec83a85caa69d3da59f0
 ```
 and this to create an environment with a cadquery-aware python-language-server (which will hopefully be picked up by your IDE):
 ```sh
-nix shell github:marcus7070/cq-flake/11ef47f5aa465e0b1cf9bbc15999a5ed0b713ba9#cadquery-env
+nix shell github:marcus7070/cq-flake/8212e406fa63e4c166deec83a85caa69d3da59f0#cadquery-env
 ```
 These commands will use pinned versions of everything, from CadQuery to glibc, and should be completly reproducible no matter what happens to CadQuery, conda, pypi, NixOS, or even QT. Hooray for nix!
