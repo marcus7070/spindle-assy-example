@@ -10,8 +10,13 @@ brace = (
     .moveTo(-dims.brace.width / 2, 0)
     .vLine(-dims.bracket.thick)
     .hLineTo(dims.brace.profile1[0] - dims.chimney.mountface.width / 2)
-    .lineTo(dims.brace.mount_face[0] - dims.chimney.mountface.width / 2, dims.brace.mount_face[1])
+    .lineTo(
+        dims.brace.mount_face[0] - dims.chimney.mountface.width / 2,
+        dims.brace.mount_face[1] + dims.magnet.slot.thick + dims.magnet.wall_thick
+    )
+    .vLine(-dims.magnet.slot.thick - dims.magnet.wall_thick)
     .hLine(dims.chimney.mountface.width)
+    .vLine(dims.magnet.slot.thick + dims.magnet.wall_thick)
     .lineTo(dims.brace.profile1[0] + dims.chimney.mountface.width / 2, 0)
     .close()
     .extrude(dims.brace.profile1[2] + dims.chimney.mountface.height)
