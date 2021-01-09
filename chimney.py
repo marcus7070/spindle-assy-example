@@ -83,19 +83,20 @@ chimney = (
         cq.Workplane('YZ', origin=(0, dims.chimney.mountbase.od / 2, dims.chimney.mountface.origin[2]))
     )
     .transformed(rotate=(0, -45, 0))
+    .workplane(centerOption='CenterOfMass', offset=-dims.chimney.mountface.width / 2)
     .moveTo(dims.chimney.mountface.origin[1], dims.chimney.mountface.height / 2)
     .hLineTo(0)
     .vLine(-dims.chimney.mountface.height)
     .lineTo(dims.chimney.mountface.origin[1], -dims.chimney.mountface.height / 2)
     .close()
-    .extrude(dims.chimney.mountface.width / 2, both=True)
+    .extrude(dims.chimney.mountface.width)
     .tag('mountbase')
 )
 for sign in [-1, 1]:
     chimney = (
         chimney
         .faces(">(1, 1, 0)", tag="mountbase")
-        .workplane()
+        .workplane(centerOption='CenterOfMass')
         .moveTo(
             sign * (dims.chimney.mountface.align.hole.diam + dims.vac.wall_thick) / 2,
             0
@@ -111,18 +112,18 @@ for sign in [-1, 1]:
 chimney = (
     chimney
     .faces('>Z', tag='beforemountface')
-    .workplane()
+    .workplane(centerOption='CenterOfMass')
     .circle(dims.chimney.top.od / 2)
-    .workplane(offset=dims.chimney.hose.socket.od - dims.chimney.top.od)
+    .workplane(centerOption='CenterOfMass', offset=dims.chimney.hose.socket.od - dims.chimney.top.od)
     .circle(dims.chimney.hose.socket.od / 2)
     .loft()
     .faces(">Z")
-    .workplane()
+    .workplane(centerOption='CenterOfMass')
     .circle(dims.chimney.hose.socket.od / 2)
     .extrude(dims.vac.wall_thick + dims.chimney.hose.insertion + dims.chimney.hose.tape_width)
     .tag('top holes')
     .faces(">Z")
-    .workplane()
+    .workplane(centerOption='CenterOfMass')
     .hole(
         dims.chimney.hose.od,
         depth=dims.chimney.hose.insertion + dims.chimney.hose.tape_width
@@ -134,12 +135,12 @@ chimney = (
     #     depth=dims.vac.wall_thick + dims.chimney.hose.insertion + dims.chimney.hose.tape_width
     # )
     .faces(">Z", tag="top holes")
-    .workplane()
+    .workplane(centerOption='CenterOfMass')
     .center(dims.chimney.hose.od / 2, 0)
     .rect(10, dims.chimney.hose.socket.od * 2)
     .cutBlind(-dims.chimney.hose.tape_width)
     .faces(">Z", tag="top holes")
-    .workplane()
+    .workplane(centerOption='CenterOfMass')
     .center(-dims.chimney.hose.od / 2, 0)
     .rect(10, dims.chimney.hose.socket.od * 2)
     .cutBlind(-dims.chimney.hose.tape_width)
@@ -148,11 +149,11 @@ chimney = (
 cutter = (
     chimney
     .faces("<Z")
-    .workplane()
+    .workplane(centerOption='CenterOfMass')
     .circle(dims.chimney.base.od)
     .extrude(-dims.chimney.base.step_z, combine=False)
     .faces("<Z")
-    .workplane()
+    .workplane(centerOption='CenterOfMass')
     .hole(dims.chimney.base.step_diam - 0.1)
 )
 chimney = chimney.cut(cutter)
@@ -169,11 +170,11 @@ vac_path = (
     .circle(dims.chimney.mountbase.id / 2)
     .sweep(path, multisection=True)
     .faces("<Z")
-    .workplane()
+    .workplane(centerOption='CenterOfMass')
     .circle(dims.chimney.base.id / 2)
     .extrude(dims.chimney.base.step_z)
     .faces(">Z")
-    .workplane()
+    .workplane(centerOption='CenterOfMass')
     .circle(dims.chimney.top.id / 2)
     .extrude(chimney_top - dims.chimney.mountbase.z)
 )
@@ -199,7 +200,12 @@ y_mid = (min(ys) + max(ys)) / 2
 faces =  chimney.faces(">(1, 1, 0)", tag="mountbase").vals()
 shell = cq.Shell.makeShell(faces)
 mount_origin = shell.Center()
-plane = chimney.faces(">(1, 1, 0)", tag="mountbase").workplane().plane
+plane = (
+    chimney
+    .faces(">(1, 1, 0)", tag="mountbase")
+    .workplane(centerOption='CenterOfMass')
+    .plane
+)
 for pos in dims.chimney.mountface.magnet.position:
     angle = 180 if (pos[1] < y_mid) else 0
     final_pos = plane.toWorldCoords((pos[0], pos[1], -dims.magnet.wall_thick))
