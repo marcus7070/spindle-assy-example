@@ -75,7 +75,7 @@ for sign in [-1, 1]:
     brace = (
         brace
         .faces("<Y", tag="mountbase")
-        .workplane()
+        .workplane(centerOption='CenterOfMass')
         .moveTo(
             sign * (dims.chimney.mountface.align.hole.diam + dims.vac.wall_thick) / 2,
             0
@@ -100,7 +100,12 @@ magnet_cutter = (
 )
 ys = [pos[1] for pos in dims.chimney.mountface.magnet.position]
 y_mid = (min(ys) + max(ys)) / 2
-plane = brace.faces("<Y", tag="mountbase").workplane().plane
+plane = (
+    brace
+    .faces("<Y", tag="mountbase")
+    .workplane(centerOption='CenterOfMass')
+    .plane
+)
 for pos in dims.chimney.mountface.magnet.position:
     angle = 180 if (pos[1] < y_mid) else 0
     final_pos = plane.toWorldCoords((pos[0], pos[1], -dims.magnet.wall_thick))
