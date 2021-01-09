@@ -24,7 +24,7 @@ importlib.reload(brace_module)
 # subassemblies to simplify the process.
 assy = cq.Assembly()
 
-back = vslot.cslot(250)
+back = vslot.cbeam_dxf(250)
 assy.add(back, name="back", color=cq.Color(0.8, 0.8, 0.8))
 assy.add(bracket_module.bracket, name="bracket", color=cq.Color(0.9, 0.9, 0.95))
 # Make the constraint between the centre of the bottom back edge of the bracket
@@ -79,7 +79,7 @@ assy.add(vac_brack, name="vac_brack", color=cq.Color(0.2, 0.2, 0.2, 0.8))
 backpoint2 = back.faces("<Z", tag="unslotted").edges("<Y").vertices(">X").val()
 vac_brack_point = vac_brack.faces("<Z").edges(">Y").vertices(">X").val()
 assy.constrain("back", backpoint2, "vac_brack", vac_brack_point, "Point")
-assy.constrain("back@faces@<Z", "vac_brack@faces@>Z", "Axis")
+assy.constrain("back?unslotted@faces@<Z", "vac_brack@faces@>Z", "Axis")
 assy.constrain(
     "back",
     back.faces("<Y", tag="unslotted").val(),

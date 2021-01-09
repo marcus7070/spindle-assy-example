@@ -66,4 +66,44 @@ def cslot(length=100):
     return out
 
 
-cslot0 = cslot()
+def cbeam_dxf(length=100):
+    """
+    Alternate to the above method, but this one imports a dxf for the profile.
+    """
+    # I'm actually laughing out loud at this process.
+    # create the base face and tag it as unslotted
+    part = (
+        cq
+        .Workplane()
+        .tag("base")
+        .box(
+            dims.outer.x, dims.base_depth, length, centered=(True, False, False)
+        )
+        .workplaneFromTagged("base")
+        .center(dims.outer.x / 2 - dims.base_depth / 2, 0)
+        .box(
+            dims.base_depth, dims.outer.y, length, centered=(True, False, False)
+        )
+        .workplaneFromTagged("base")
+        .center(-dims.outer.x / 2 + dims.base_depth / 2, 0)
+        .box(
+            dims.base_depth, dims.outer.y, length, centered=(True, False, False)
+        )
+        .tag("unslotted")
+    )
+    # import dxf
+    imported = (
+        cq.importers.importDXF('C-Beam-DXF.dxf')
+        .translate((0, dims.base_depth, 0))
+        .wires()
+        .toPending()
+        .extrude(length)
+    )
+    # completely replace everything I just made with the imported version, but
+    # this will still preserve the unslotted tag, so I can use that in my
+    # assembly constraints
+    part = part.newObject(imported.objects)
+    return part
+
+
+cslot0 = cbeam_dxf()
